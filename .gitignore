@@ -1,6 +1,13 @@
 node_modules/
-# Never commit credentials. App password lives in ~/.config/gmail-cli/credentials.json,
-# but guard against any local copy too.
+# Never commit credentials. The App Password lives in ~/.config/gmail-cli/credentials.json;
+# guard against any local copy. The other config/log files can hold recipient addresses,
+# so keep them out of the repo too (they normally live under ~/.config/gmail-cli/).
 credentials.json
+config.json
+allowlist.json
+sent.jsonl
 *.local
 .DS_Store
+
+# npm pack artifact
+*.tgz

@@ -47,7 +47,7 @@ export function buildProgram(deps = defaultDeps) {
   const program = new Command();
   program
     .name('gmail')
-    .description('Personal Gmail send-only CLI for agentic sessions (reads stay on the claude.ai connector)')
+    .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
     .version('0.3.0')
     .option('--format <format>', 'output format: json|table', 'json');
 
