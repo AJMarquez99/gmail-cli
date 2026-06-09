@@ -1,5 +1,30 @@
+import { basename, resolve as resolvePath } from 'node:path';
 import { InvalidInputError, RecipientNotAllowedError } from '../lib/errors.js';
 import { makeAllowChecker } from '../allowlist.js';
+
+const GMAIL_MAX_BYTES = 25 * 1024 * 1024;
+const WARN_BYTES = 20 * 1024 * 1024;
+
+// Resolve & validate attachment paths → [{ filename, path, bytes }]. Throws on missing/oversize.
+function buildAttachments(paths, deps) {
+  const out = [];
+  let total = 0;
+  for (const p of paths) {
+    const abs = resolvePath(p);
+    let stat;
+    try { stat = deps.statFile(abs); } catch { throw new InvalidInputError(`Attachment not found: ${abs}`); }
+    if (!stat.isFile()) throw new InvalidInputError(`Attachment is not a file: ${abs}`);
+    total += stat.size;
+    out.push({ filename: basename(abs), path: abs, bytes: stat.size });
+  }
+  if (total > GMAIL_MAX_BYTES) {
+    throw new InvalidInputError(`Attachments total ${(total / 1048576).toFixed(1)}MB exceeds Gmail's 25MB limit.`);
+  }
+  if (total > WARN_BYTES) {
+    process.stderr.write(`warn: attachments total ${(total / 1048576).toFixed(1)}MB — near Gmail's 25MB limit.\n`);
+  }
+  return out;
+}
 
 // Accept an array (repeated flags), a comma-separated string, or any mix of both;
 // return a clean, flattened array of addresses.
@@ -41,6 +66,10 @@ export async function runSend(opts, deps) {
   const bccResolved = allow(bcc);
   if (denied.length) throw new RecipientNotAllowedError(denied);
 
+  const attachments = (opts.attach && opts.attach.length)
+    ? buildAttachments(toList(opts.attach), deps)
+    : [];
+
   const transporter = deps.createTransport(creds);
 
   const message = {
@@ -53,6 +82,7 @@ export async function runSend(opts, deps) {
   if (opts.body) message.text = opts.body;
   if (opts.html) message.html = opts.html;
   if (opts.replyTo) message.replyTo = opts.replyTo;
+  if (attachments.length) message.attachments = attachments.map(({ filename, path }) => ({ filename, path }));
 
   const info = await transporter.sendMail(message);
 
@@ -65,5 +95,6 @@ export async function runSend(opts, deps) {
     messageId: info.messageId,
     accepted: info.accepted || [],
     rejected: info.rejected || [],
+    attachments: attachments.map(({ filename, bytes }) => ({ filename, bytes })),
   };
 }

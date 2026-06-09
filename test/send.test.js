@@ -42,7 +42,6 @@ describe('runSend', () => {
         text: 'hello',
       }),
     );
-    // TODO(Task 2): add attachments: [] here once runSend returns that field
     expect(out).toEqual({
       from: 'agentic.marquez@gmail.com',
       to: ['x@y.com'],
@@ -52,6 +51,7 @@ describe('runSend', () => {
       messageId: '<id@gmail>',
       accepted: ['x@y.com'],
       rejected: [],
+      attachments: [],
     });
   });
 

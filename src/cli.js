@@ -59,6 +59,7 @@ export function buildProgram(deps = defaultDeps) {
     .option('--body <text>', 'plain-text body (or pipe it on stdin)')
     .option('--html <html>', 'HTML body')
     .option('--reply-to <addr>', 'Reply-To address')
+    .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
     .action(
       handle(
         runSend,

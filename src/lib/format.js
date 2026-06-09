@@ -5,7 +5,11 @@ export function printJson(value) {
 // Compact human-readable line for `--format table`.
 export function formatSend(result) {
   const rcpt = [...result.to, ...result.cc, ...result.bcc].join(', ');
-  return `sent → ${rcpt}\nsubject: ${result.subject || '(none)'}\nmessage-id: ${result.messageId}`;
+  const lines = [`sent → ${rcpt}`, `subject: ${result.subject || '(none)'}`, `message-id: ${result.messageId}`];
+  if (result.attachments && result.attachments.length) {
+    lines.push(`attachments: ${result.attachments.map((a) => a.filename).join(', ')}`);
+  }
+  return lines.join('\n');
 }
 
 export function formatDoctor(result) {
