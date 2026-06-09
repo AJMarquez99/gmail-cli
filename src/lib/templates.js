@@ -12,7 +12,7 @@ export const ALLOWLIST_TEMPLATE =
 export const CONFIG_TEMPLATE =
   JSON.stringify(
     {
-      _comment: 'All fields are optional. Remove or leave blank any you do not need.',
+      _comment: 'All fields are optional. Remove or leave blank any you do not need. allowlist.enforce: set false to let the agent send to anyone (default true = fail-closed).',
       fromName: 'Your Name',
       replyTo: 'you@example.com',
       signature: {
@@ -22,6 +22,9 @@ export const CONFIG_TEMPLATE =
       sendLog: {
         enabled: true,
         logBody: false,
+      },
+      allowlist: {
+        enforce: true,
       },
     },
     null,

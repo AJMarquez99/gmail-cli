@@ -19,7 +19,7 @@ export function formatDoctor(result) {
     `source:      ${result.source || '(none)'}`,
     `credentials: ${result.credentials}`,
     `smtp:        ${result.smtp}`,
-    `allowlist:   ${result.allowlist} recipient(s)`,
+    `allowlist:   ${result.allowlist} recipient(s) — ${result.allowlistEnforced ? 'enforced' : 'DISABLED'}`,
   ];
   if (result.error) lines.push('', result.error);
   return lines.join('\n');
@@ -63,6 +63,7 @@ export function formatDryRun(r) {
   if (r.replyTo) lines.push(`reply-to: ${r.replyTo}`);
   if (r.inReplyTo) lines.push(`in-reply-to: ${r.inReplyTo}`);
   if (r.attachments.length) lines.push(`attachments: ${r.attachments.map((a) => `${a.filename} (${a.bytes}b)`).join(', ')}`);
+  if (r.allowlistEnforced === false) lines.push('allowlist: DISABLED (sending to any recipient)');
   if (r.denied.length) lines.push(`WOULD BE BLOCKED: ${r.denied.join(', ')}`);
   return lines.join('\n');
 }

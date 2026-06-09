@@ -103,7 +103,32 @@ Edit `~/.config/gmail-cli/allowlist.json` (or override path with `GMAIL_ALLOWLIS
   whole send is rejected (nothing is sent) and the command exits `3`.
 - `--dry-run` reports would-be-blocked recipients without throwing — useful for pre-flight checks.
 - Matching is case-insensitive.
-- `gmail allow list` shows the current entries; `gmail doctor` reports the count.
+- `gmail allow list` shows the current entries; `gmail doctor` reports the count and enforcement status.
+
+### Disabling enforcement ("let the agent run free")
+
+Enforcement can be turned off to allow sending to any recipient without maintaining the allowlist. **Default is always ON (fail-closed).** Aliases still expand when enforcement is off — only the block is lifted.
+
+**Per-send (flag):**
+```bash
+gmail send --to anyone@example.com --subject "Hi" --body "Hello." --no-allowlist
+```
+
+A stderr warning is emitted on every real send with enforcement off:
+```
+warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).
+```
+
+**Persistent (config):** set `allowlist.enforce` to `false` in `config.json`:
+```json
+{
+  "allowlist": {
+    "enforce": false
+  }
+}
+```
+
+The `--no-allowlist` flag overrides the config for a single send regardless of what the config says. To re-enable, set `allowlist.enforce: true` (or remove the key) and drop `--no-allowlist`.
 
 ## Usage
 
@@ -197,6 +222,7 @@ Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missi
 | `--dry-run` | Assemble and preview the message without sending or logging; reports would-be-blocked recipients |
 | `--log-body` | Include body text in this send's log entry (overrides `config.sendLog.logBody`) |
 | `--no-log` | Do not append this send to the send log |
+| `--no-allowlist` | Disable allowlist enforcement for this send — sends to any recipient; aliases still expand |
 
 ## Configuration (non-secret preferences)
 
@@ -215,6 +241,9 @@ win over config values.
   "sendLog": {
     "enabled": true,
     "logBody": false
+  },
+  "allowlist": {
+    "enforce": true
   }
 }
 ```
@@ -226,6 +255,7 @@ win over config values.
 | `signature.text` / `signature.html` | Appended to text/HTML body after a blank line | `--no-signature` |
 | `sendLog.enabled` | `false` disables the log globally | `--no-log` (per-send) |
 | `sendLog.logBody` | `true` includes body text in every log entry | `--log-body` (per-send) |
+| `allowlist.enforce` | `false` disables allowlist enforcement globally (default: `true`) | `--no-allowlist` (per-send) |
 
 ## Send log
 

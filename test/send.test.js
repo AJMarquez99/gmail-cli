@@ -149,4 +149,94 @@ describe('runSend', () => {
     await runSend({ to: 'x@y.com', subject: 'S', body: 'b', noLog: true }, deps);
     expect(deps.appendLog).not.toHaveBeenCalled();
   });
+
+  // Allowlist toggle tests
+  it('default ON still blocks an unlisted recipient', async () => {
+    const deps = makeDeps();
+    await expect(
+      runSend({ to: 'stranger@evil.com', subject: 'S', body: 'b' }, deps),
+    ).rejects.toThrow(RecipientNotAllowedError);
+    expect(deps._transporter.sendMail).not.toHaveBeenCalled();
+  });
+
+  it('--no-allowlist (noAllowlist) bypasses enforcement and sends', async () => {
+    const deps = makeDeps();
+    const out = await runSend({ to: 'stranger@evil.com', subject: 'S', body: 'b', noAllowlist: true }, deps);
+    expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: ['stranger@evil.com'] }),
+    );
+    expect(out.to).toEqual(['stranger@evil.com']);
+  });
+
+  it('opts.allowlist === false (commander form) bypasses enforcement and sends', async () => {
+    const deps = makeDeps();
+    const out = await runSend({ to: 'stranger@evil.com', subject: 'S', body: 'b', allowlist: false }, deps);
+    expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: ['stranger@evil.com'] }),
+    );
+    expect(out.to).toEqual(['stranger@evil.com']);
+  });
+
+  it('config allowlist.enforce false bypasses enforcement and sends', async () => {
+    const deps = makeDeps({ config: { allowlist: { enforce: false } } });
+    const out = await runSend({ to: 'stranger@evil.com', subject: 'S', body: 'b' }, deps);
+    expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: ['stranger@evil.com'] }),
+    );
+    expect(out.to).toEqual(['stranger@evil.com']);
+  });
+
+  it('alias still expands when enforcement is off', async () => {
+    const deps = makeDeps({ config: { allowlist: { enforce: false } } });
+    const out = await runSend({ to: 'boss', subject: 'S', body: 'b' }, deps);
+    expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: ['boss@x.com'] }),
+    );
+    expect(out.to).toEqual(['boss@x.com']);
+  });
+
+  it('default (no flag, no config) still enforces the allowlist', async () => {
+    const deps = makeDeps();
+    await expect(
+      runSend({ to: 'unknown@evil.com', subject: 'S', body: 'b' }, deps),
+    ).rejects.toThrow(RecipientNotAllowedError);
+  });
+
+  it('passes unlisted cc/bcc through to sendMail when enforcement is off', async () => {
+    const deps = makeDeps({ config: { allowlist: { enforce: false } } });
+    await runSend(
+      { to: 'x@y.com', cc: 'sneaky@evil.com', bcc: 'shadow@evil.com', subject: 'S', body: 'b' },
+      deps,
+    );
+    expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['x@y.com'],
+        cc: ['sneaky@evil.com'],
+        bcc: ['shadow@evil.com'],
+      }),
+    );
+  });
+
+  it('warns on stderr on a real send when enforcement is off', async () => {
+    const deps = makeDeps({ config: { allowlist: { enforce: false } } });
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runSend({ to: 'stranger@evil.com', subject: 'S', body: 'b' }, deps);
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('allowlist enforcement disabled'));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('does NOT warn on stderr on a real send when enforcement is on', async () => {
+    const deps = makeDeps();
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runSend({ to: 'x@y.com', subject: 'S', body: 'b' }, deps);
+      const warned = spy.mock.calls.some(([arg]) => String(arg).includes('allowlist enforcement disabled'));
+      expect(warned).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

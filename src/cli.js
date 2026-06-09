@@ -48,7 +48,7 @@ export function buildProgram(deps = defaultDeps) {
   program
     .name('gmail')
     .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
-    .version('0.3.0')
+    .version('0.4.0')
     .option('--format <format>', 'output format: json|table', 'json');
 
   program
@@ -71,6 +71,7 @@ export function buildProgram(deps = defaultDeps) {
     .option('--dry-run', 'assemble and preview the message without sending or logging')
     .option('--log-body', 'include the body in the send-log entry (off by default)')
     .option('--no-log', 'do not append this send to the send log')
+    .option('--no-allowlist', 'disable the recipient allowlist for this send (sends to any recipient)')
     .action(
       handle(
         runSend,
