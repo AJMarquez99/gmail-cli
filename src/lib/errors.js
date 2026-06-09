@@ -18,7 +18,7 @@ export class MissingCredentialsError extends GmailError {
     super(
       `No Gmail credentials found.\n` +
         `Set GMAIL_USER + GMAIL_APP_PASSWORD, or create ${path} with:\n` +
-        `  { "user": "agentic.marquez@gmail.com", "appPassword": "xxxx xxxx xxxx xxxx" }\n` +
+        `  { "user": "you@gmail.com", "appPassword": "xxxx xxxx xxxx xxxx" }\n` +
         `Generate an App Password at https://myaccount.google.com/apppasswords (requires 2-Step Verification).`,
       EXIT_CODES.CONFIG,
     );

@@ -4,8 +4,9 @@ import { runSend } from './commands/send.js';
 import { runDoctor } from './commands/doctor.js';
 import { runAllowList } from './commands/allow.js';
 import { runLog } from './commands/log.js';
+import { runInit } from './commands/init.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -46,8 +47,8 @@ export function buildProgram(deps = defaultDeps) {
   const program = new Command();
   program
     .name('gmail')
-    .description('Personal Gmail send-only CLI for agentic sessions (reads stay on the claude.ai connector)')
-    .version('0.2.0')
+    .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
+    .version('0.3.0')
     .option('--format <format>', 'output format: json|table', 'json');
 
   program
@@ -91,6 +92,11 @@ export function buildProgram(deps = defaultDeps) {
     .command('doctor')
     .description('Check credentials and verify the Gmail SMTP connection')
     .action(handle(runDoctor, { table: formatDoctor }, deps));
+
+  program
+    .command('init')
+    .description('Scaffold ~/.config/gmail-cli/ config files and print setup steps')
+    .action(handle(runInit, { table: formatInit }, deps));
 
   const allow = program
     .command('allow')

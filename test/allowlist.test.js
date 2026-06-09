@@ -65,8 +65,8 @@ describe('makeAllowChecker', () => {
   });
 
   it('always allows self even when not in the list', () => {
-    const { resolve } = makeAllowChecker({ allowlist, self: 'agentic.marquez@gmail.com' });
-    expect(resolve('agentic.marquez@gmail.com')).toEqual({ email: 'agentic.marquez@gmail.com' });
+    const { resolve } = makeAllowChecker({ allowlist, self: 'you@example.com' });
+    expect(resolve('you@example.com')).toEqual({ email: 'you@example.com' });
   });
 
   it('denies an unlisted email', () => {

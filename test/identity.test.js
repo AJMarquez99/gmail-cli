@@ -4,7 +4,7 @@ import { runSend } from '../src/commands/send.js';
 function deps({ config = {} } = {}) {
   const transporter = { sendMail: vi.fn(async () => ({ messageId: '<id>', accepted: [], rejected: [] })) };
   return {
-    resolveCredentials: () => ({ user: 'agentic.marquez@gmail.com', appPassword: 'pw' }),
+    resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
     loadAllowlist: () => ({ recipients: [{ email: 'x@y.com', aliases: ['x'] }] }),
     loadConfig: () => config,
     createTransport: () => transporter,
@@ -31,10 +31,10 @@ describe('identity & threading', () => {
   });
 
   it('formats From with a display name from config', async () => {
-    const d = deps({ config: { fromName: 'Daedabyte' } });
+    const d = deps({ config: { fromName: 'Example Co' } });
     await send({}, d);
     expect(d._transporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: '"Daedabyte" <agentic.marquez@gmail.com>' }),
+      expect.objectContaining({ from: '"Example Co" <you@example.com>' }),
     );
   });
 
