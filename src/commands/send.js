@@ -1,0 +1,52 @@
+import { InvalidInputError } from '../lib/errors.js';
+
+// Accept an array (repeated flags), a comma-separated string, or any mix of both;
+// return a clean, flattened array of addresses.
+function toList(value) {
+  if (value == null) return [];
+  const arr = Array.isArray(value) ? value : [value];
+  return arr
+    .flatMap((entry) => String(entry).split(','))
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export async function runSend(opts, deps) {
+  const to = toList(opts.to);
+  const cc = toList(opts.cc);
+  const bcc = toList(opts.bcc);
+
+  if (to.length === 0 && cc.length === 0 && bcc.length === 0) {
+    throw new InvalidInputError('No recipients. Provide at least one of --to / --cc / --bcc.');
+  }
+  if (!opts.body && !opts.html) {
+    throw new InvalidInputError('Empty message. Provide --body (text), --html, or pipe body on stdin.');
+  }
+
+  const creds = deps.resolveCredentials();
+  const transporter = deps.createTransport(creds);
+
+  const message = {
+    from: creds.user,
+    to,
+    cc,
+    bcc,
+    subject: opts.subject || '',
+  };
+  if (opts.body) message.text = opts.body;
+  if (opts.html) message.html = opts.html;
+  if (opts.replyTo) message.replyTo = opts.replyTo;
+
+  const info = await transporter.sendMail(message);
+
+  return {
+    from: creds.user,
+    to,
+    cc,
+    bcc,
+    subject: message.subject,
+    messageId: info.messageId,
+    accepted: info.accepted || [],
+    rejected: info.rejected || [],
+  };
+}
