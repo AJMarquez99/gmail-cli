@@ -61,6 +61,10 @@ export function buildProgram(deps = defaultDeps) {
     .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
     .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
     .option('--reply-to <addr>', 'Reply-To address')
+    .option('--from-name <name>', 'display name on the From header')
+    .option('--in-reply-to <messageId>', 'Message-ID this email replies to (threads it)')
+    .option('--references <id>', 'References header id (repeatable; comma-separated ok)', collect, [])
+    .option('--no-signature', 'do not append the configured signature')
     .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
     .action(
       handle(

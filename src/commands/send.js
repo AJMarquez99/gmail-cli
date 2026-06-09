@@ -54,6 +54,7 @@ export async function runSend(opts, deps) {
   }
 
   const creds = deps.resolveCredentials();
+  const config = deps.loadConfig();
 
   // Enforce the allowlist (fail-closed): expand aliases to canonical emails and reject the
   // whole send if any recipient isn't permitted — self is always implicitly allowed.
@@ -87,8 +88,21 @@ export async function runSend(opts, deps) {
     if (opts.html) html = opts.html;
   }
 
+  // Signature: appended after body assembly; suppressed by --no-signature (opts.noSignature)
+  // or when commander maps --no-signature → opts.signature === false.
+  const suppressSig = opts.noSignature || opts.signature === false;
+  const sig = (!suppressSig && config.signature) || null;
+  if (sig) {
+    if (text != null && sig.text) text = `${text}\n\n${sig.text}`;
+    if (html != null && sig.html) html = `${html}${sig.html}`;
+  }
+
+  // Identity
+  const fromName = opts.fromName || config.fromName;
+  const replyTo = opts.replyTo || config.replyTo;
+
   const message = {
-    from: creds.user,
+    from: fromName ? `"${fromName}" <${creds.user}>` : creds.user,
     to: toResolved,
     cc: ccResolved,
     bcc: bccResolved,
@@ -96,13 +110,22 @@ export async function runSend(opts, deps) {
   };
   if (text != null) message.text = text;
   if (html != null) message.html = html;
-  if (opts.replyTo) message.replyTo = opts.replyTo;
+  if (replyTo) message.replyTo = replyTo;
   if (attachments.length) message.attachments = attachments.map(({ filename, path }) => ({ filename, path }));
+
+  // Threading
+  const refs = toList(opts.references);
+  if (opts.inReplyTo) {
+    message.inReplyTo = opts.inReplyTo;
+    message.references = refs.length ? refs : [opts.inReplyTo];
+  } else if (refs.length) {
+    message.references = refs;
+  }
 
   const info = await transporter.sendMail(message);
 
   return {
-    from: creds.user,
+    from: message.from,
     to: toResolved,
     cc: ccResolved,
     bcc: bccResolved,
