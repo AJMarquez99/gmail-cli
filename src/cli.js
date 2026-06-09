@@ -2,8 +2,9 @@ import { Command } from 'commander';
 import { defaultDeps } from './deps.js';
 import { runSend } from './commands/send.js';
 import { runDoctor } from './commands/doctor.js';
+import { runAllowList } from './commands/allow.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDoctor } from './lib/format.js';
+import { printJson, formatSend, formatDoctor, formatAllowList } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -22,7 +23,9 @@ function handle(fn, { table, preprocess } = {}, deps = defaultDeps) {
   return async (...actionArgs) => {
     const cmd = actionArgs[actionArgs.length - 1];
     const opts = cmd.opts();
-    const globalOpts = cmd.parent ? cmd.parent.opts() : {};
+    let root = cmd;
+    while (root.parent) root = root.parent;
+    const globalOpts = root.opts();
     try {
       if (preprocess) await preprocess(opts);
       const result = await fn(opts, deps);
@@ -77,6 +80,14 @@ export function buildProgram(deps = defaultDeps) {
     .command('doctor')
     .description('Check credentials and verify the Gmail SMTP connection')
     .action(handle(runDoctor, { table: formatDoctor }, deps));
+
+  const allow = program
+    .command('allow')
+    .description('Inspect the recipient allowlist (edit ~/.config/gmail-cli/allowlist.json by hand)');
+  allow
+    .command('list')
+    .description('List allowed recipients and their aliases')
+    .action(handle(runAllowList, { table: formatAllowList }, deps));
 
   return program;
 }

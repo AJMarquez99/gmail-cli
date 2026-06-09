@@ -5,12 +5,14 @@ import { MissingCredentialsError } from '../lib/errors.js';
  * Never throws — returns a diagnostic envelope so callers always get a readable report.
  */
 export async function runDoctor(opts, deps) {
+  const allowlist = deps.loadAllowlist().recipients.filter((r) => r && r.email).length;
+
   let creds;
   try {
     creds = deps.resolveCredentials();
   } catch (err) {
     if (err instanceof MissingCredentialsError) {
-      return { ok: false, credentials: 'missing', smtp: 'skipped', error: err.message };
+      return { ok: false, credentials: 'missing', smtp: 'skipped', error: err.message, allowlist };
     }
     throw err;
   }
@@ -25,8 +27,9 @@ export async function runDoctor(opts, deps) {
       source: creds.source,
       credentials: 'ok',
       smtp: err.message || String(err),
+      allowlist,
     };
   }
 
-  return { ok: true, user: creds.user, source: creds.source, credentials: 'ok', smtp: 'ok' };
+  return { ok: true, user: creds.user, source: creds.source, credentials: 'ok', smtp: 'ok', allowlist };
 }

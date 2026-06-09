@@ -64,14 +64,40 @@ generate-report | gmail send --to team@x.com --subject "Nightly report"
 1. `GMAIL_USER` + `GMAIL_APP_PASSWORD` env vars
 2. `GMAIL_CLI_CONFIG` path, else `~/.config/gmail-cli/credentials.json`
 
+## Recipient allowlist (security)
+
+`gmail send` is **fail-closed**: it will only email addresses on an allowlist (plus the
+configured account itself, which is always implicitly allowed). With no allowlist file, the
+only permitted recipient is `agentic.marquez@gmail.com` — so a stray or hijacked agent can't
+mail strangers.
+
+Edit the list by hand at `~/.config/gmail-cli/allowlist.json` (override with `GMAIL_ALLOWLIST`):
+
+```json
+{
+  "recipients": [
+    { "email": "alice@example.com", "aliases": ["alice", "a"] },
+    { "email": "bob@example.com" }
+  ]
+}
+```
+
+- `aliases` are optional. Address by alias and it expands to the real email:
+  `gmail send --to alice …` sends to `alice@example.com`.
+- Enforcement covers `--to`, `--cc`, and `--bcc`. If **any** recipient isn't permitted, the
+  whole send is rejected (nothing is sent) and the command exits `3`.
+- Matching is case-insensitive. `gmail allow list` shows the current entries; `gmail doctor`
+  reports the count.
+
 ## Commands
 
 | Command | Description |
 |---|---|
-| `gmail send`   | Send an email (text/HTML, to/cc/bcc, reply-to, stdin body). |
-| `gmail doctor` | Check credentials are present and Gmail accepts them over SMTP. |
+| `gmail send`       | Send an email (text/HTML, to/cc/bcc, reply-to, stdin body). Enforces the allowlist. |
+| `gmail doctor`     | Check credentials, verify Gmail SMTP, report allowlist size. |
+| `gmail allow list` | List allowed recipients and their aliases (read-only; edit the JSON by hand). |
 
-Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients).
+Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients) · `3` recipient blocked by allowlist.
 
 ## Develop
 
@@ -90,3 +116,5 @@ Architecture mirrors `gsc-cli`: ESM, `commander`, dependency-injected command ha
   `credentials.json` at `chmod 600`; never commit it.
 - Scope is send-only by construction (SMTP). Revoke anytime at
   <https://myaccount.google.com/apppasswords>.
+- Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast
+  radius of a misused App Password is limited to addresses you've explicitly approved.

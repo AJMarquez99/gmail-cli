@@ -15,7 +15,15 @@ export function formatDoctor(result) {
     `source:      ${result.source || '(none)'}`,
     `credentials: ${result.credentials}`,
     `smtp:        ${result.smtp}`,
+    `allowlist:   ${result.allowlist} recipient(s)`,
   ];
   if (result.error) lines.push('', result.error);
   return lines.join('\n');
+}
+
+export function formatAllowList(result) {
+  if (result.count === 0) return '(allowlist empty — only the configured account can be emailed)';
+  return result.recipients
+    .map((r) => (r.aliases.length ? `${r.email}  [${r.aliases.join(', ')}]` : r.email))
+    .join('\n');
 }

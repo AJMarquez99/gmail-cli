@@ -2,6 +2,7 @@
 export const EXIT_CODES = {
   GENERIC: 1, // unexpected / SMTP / network failure
   CONFIG: 2, // user-fixable config (missing credentials, bad input)
+  FORBIDDEN: 3, // recipient blocked by the allowlist policy
 };
 
 export class GmailError extends Error {
@@ -27,5 +28,17 @@ export class MissingCredentialsError extends GmailError {
 export class InvalidInputError extends GmailError {
   constructor(message) {
     super(message, EXIT_CODES.CONFIG);
+  }
+}
+
+export class RecipientNotAllowedError extends GmailError {
+  constructor(denied) {
+    super(
+      `Blocked by allowlist — not permitted recipients: ${denied.join(', ')}\n` +
+        `Nothing was sent. Add them (or an alias) to the allowlist, then retry.\n` +
+        `Allowlist: ~/.config/gmail-cli/allowlist.json (GMAIL_ALLOWLIST overrides). See \`gmail allow list\`.`,
+      EXIT_CODES.FORBIDDEN,
+    );
+    this.denied = denied;
   }
 }
