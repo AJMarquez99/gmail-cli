@@ -3,8 +3,9 @@ import { defaultDeps } from './deps.js';
 import { runSend } from './commands/send.js';
 import { runDoctor } from './commands/doctor.js';
 import { runAllowList } from './commands/allow.js';
+import { runLog } from './commands/log.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDoctor, formatAllowList } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -46,7 +47,7 @@ export function buildProgram(deps = defaultDeps) {
   program
     .name('gmail')
     .description('Personal Gmail send-only CLI for agentic sessions (reads stay on the claude.ai connector)')
-    .version('0.1.0')
+    .version('0.2.0')
     .option('--format <format>', 'output format: json|table', 'json');
 
   program
@@ -58,12 +59,22 @@ export function buildProgram(deps = defaultDeps) {
     .option('--subject <text>', 'subject line')
     .option('--body <text>', 'plain-text body (or pipe it on stdin)')
     .option('--html <html>', 'HTML body')
+    .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
+    .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
     .option('--reply-to <addr>', 'Reply-To address')
+    .option('--from-name <name>', 'display name on the From header')
+    .option('--in-reply-to <messageId>', 'Message-ID this email replies to (threads it)')
+    .option('--references <id>', 'References header id (repeatable; comma-separated ok)', collect, [])
+    .option('--no-signature', 'do not append the configured signature')
+    .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
+    .option('--dry-run', 'assemble and preview the message without sending or logging')
+    .option('--log-body', 'include the body in the send-log entry (off by default)')
+    .option('--no-log', 'do not append this send to the send log')
     .action(
       handle(
         runSend,
         {
-          table: formatSend,
+          table: (r) => (r.dryRun ? formatDryRun(r) : formatSend(r)),
           // If no body/html given, fall back to piped stdin.
           preprocess: async (opts) => {
             if (!opts.body && !opts.html) {
@@ -88,6 +99,13 @@ export function buildProgram(deps = defaultDeps) {
     .command('list')
     .description('List allowed recipients and their aliases')
     .action(handle(runAllowList, { table: formatAllowList }, deps));
+
+  program
+    .command('log')
+    .alias('sent')
+    .description('Show recent sent-mail log entries (newest first)')
+    .option('--limit <n>', 'max entries to show', '20')
+    .action(handle(runLog, { table: formatLog }, deps));
 
   return program;
 }

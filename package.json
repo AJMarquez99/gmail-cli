@@ -1,6 +1,6 @@
 {
   "name": "gmail-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Personal Gmail send-only CLI for agentic sessions (gh/aws/gsc sibling). Sends mail via SMTP + App Password; reading stays on the claude.ai Gmail connector.",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
+    "marked": "^18.0.5",
     "nodemailer": "^8.0.10"
   },
   "devDependencies": {

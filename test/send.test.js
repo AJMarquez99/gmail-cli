@@ -13,14 +13,19 @@ const DEFAULT_ALLOWLIST = {
   ],
 };
 
-function makeDeps({ sendMail, allowlist = DEFAULT_ALLOWLIST } = {}) {
+function makeDeps({ sendMail, allowlist = DEFAULT_ALLOWLIST, config = {} } = {}) {
   const transporter = {
     sendMail: sendMail || vi.fn(async () => ({ messageId: '<id@gmail>', accepted: ['x@y.com'], rejected: [] })),
   };
   return {
     resolveCredentials: vi.fn(() => ({ user: 'agentic.marquez@gmail.com', appPassword: 'pw', source: 'env' })),
     loadAllowlist: vi.fn(() => allowlist),
+    loadConfig: vi.fn(() => config),
     createTransport: vi.fn(() => transporter),
+    statFile: vi.fn(() => ({ isFile: () => true, size: 1024 })),
+    now: vi.fn(() => '2026-01-01T00:00:00.000Z'),
+    appendLog: vi.fn(),
+    readLog: vi.fn(() => []),
     _transporter: transporter,
   };
 }
@@ -46,6 +51,7 @@ describe('runSend', () => {
       messageId: '<id@gmail>',
       accepted: ['x@y.com'],
       rejected: [],
+      attachments: [],
     });
   });
 
@@ -113,5 +119,34 @@ describe('runSend', () => {
   it('throws InvalidInputError when neither body nor html is provided', async () => {
     const deps = makeDeps();
     await expect(runSend({ to: 'x@y.com', subject: 'S' }, deps)).rejects.toThrow(InvalidInputError);
+  });
+
+  it('renders a markdown body to html with a plaintext fallback', async () => {
+    const deps = makeDeps();
+    await runSend({ to: 'x@y.com', subject: 'S', body: '# Hi', markdown: true }, deps);
+    const arg = deps._transporter.sendMail.mock.calls[0][0];
+    expect(arg.html).toContain('<h1');
+    expect(arg.text).toBe('# Hi');
+  });
+
+  it('rejects --markdown together with --html', async () => {
+    const deps = makeDeps();
+    await expect(runSend({ to: 'x@y.com', body: '# Hi', markdown: true, html: '<b>x</b>' }, deps))
+      .rejects.toThrow(InvalidInputError);
+  });
+
+  it('appends a metadata-only send-log entry on success', async () => {
+    const deps = makeDeps();
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'secret body' }, deps);
+    expect(deps.appendLog).toHaveBeenCalledWith(expect.objectContaining({
+      ts: '2026-01-01T00:00:00.000Z', subject: 'S', messageId: '<id@gmail>',
+    }));
+    expect(deps.appendLog.mock.calls[0][0].text).toBeUndefined(); // body not logged by default
+  });
+
+  it('skips logging when --no-log is set', async () => {
+    const deps = makeDeps();
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b', noLog: true }, deps);
+    expect(deps.appendLog).not.toHaveBeenCalled();
   });
 });
