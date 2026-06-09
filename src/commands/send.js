@@ -107,7 +107,8 @@ export async function runSend(opts, deps) {
   if (opts.dryRun) {
     return {
       dryRun: true,
-      from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
+      from: message.from,
+      to: toResolved.filter(Boolean), cc: ccResolved.filter(Boolean), bcc: bccResolved.filter(Boolean),
       subject: message.subject, replyTo: replyTo || null, inReplyTo: opts.inReplyTo || null,
       hasHtml: html != null, hasText: text != null,
       textPreview: text != null ? text.slice(0, 500) : null,

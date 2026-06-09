@@ -31,5 +31,13 @@ describe('--dry-run', () => {
     const out = await runSend({ to: 'stranger@evil.com', subject: 'S', body: 'b', dryRun: true }, d);
     expect(out.denied).toEqual(['stranger@evil.com']);
     expect(out.dryRun).toBe(true);
+    expect(out.to).toEqual([]);
+  });
+
+  it('keeps allowed recipients but excludes denied ones from to/cc/bcc', async () => {
+    const d = deps();
+    const out = await runSend({ to: 'x@y.com, stranger@evil.com', subject: 'S', body: 'b', dryRun: true }, d);
+    expect(out.to).toEqual(['x@y.com']);
+    expect(out.denied).toEqual(['stranger@evil.com']);
   });
 });
