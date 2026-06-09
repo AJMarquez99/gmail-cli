@@ -1,44 +1,109 @@
 # gmail-cli
 
-Personal Gmail **send-only** CLI for agentic sessions — the `gh`/`aws`/`gsc` sibling for
-firing email autonomously. Reading and drafting stay on the managed **claude.ai Gmail
-connector**; this tool exists only to do the one thing the connector can't: actually *send*.
+[![npm version](https://img.shields.io/npm/v/@ajmarquez99/gmail-cli)](https://www.npmjs.com/package/@ajmarquez99/gmail-cli)
+[![CI](https://github.com/AJMarquez99/gmail-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/AJMarquez99/gmail-cli/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Sends as **agentic.marquez@gmail.com** over Gmail SMTP using an **App Password**.
+A send-only Gmail CLI with a fail-closed recipient allowlist.
 
-## Why this exists
-
-The claude.ai Gmail connector (`mcp__claude_ai_Gmail__*`) can search, read, label, and
-*draft* — but it has no `send` tool. For a fully headless "compose and send" agent flow,
-this CLI closes that gap with the minimal viable approach: Nodemailer + SMTP + App Password.
+Sends over Gmail SMTP using an **App Password** — no OAuth, no service accounts. Pairs well with
+a read-only setup (e.g. the [claude.ai Gmail connector](https://claude.ai)) for a full
+compose-and-send agent loop, but works perfectly standalone; you don't need anything else to send.
 
 ## Install
 
+**Global (recommended)**
 ```bash
-cd ~/Code/Projects/gmail-cli && npm install && npm install -g .
+npm install -g @ajmarquez99/gmail-cli
+gmail --version
 ```
 
-That puts `gmail` on your PATH (symlinked from the global npm bin).
-
-## One-time setup (App Password)
-
-App Passwords require 2-Step Verification on the Google account.
-
-1. Enable 2FA: <https://myaccount.google.com/signinoptions/twosv>
-2. Generate an App Password: <https://myaccount.google.com/apppasswords>
-   (pick "Mail" / "Other"; you get a 16-character code shown as `xxxx xxxx xxxx xxxx`).
-3. Store it (spaces optional — they're stripped):
-
+**No install (npx)**
 ```bash
-mkdir -p ~/.config/gmail-cli
-cat > ~/.config/gmail-cli/credentials.json <<'JSON'
-{ "user": "agentic.marquez@gmail.com", "appPassword": "xxxx xxxx xxxx xxxx" }
-JSON
-chmod 600 ~/.config/gmail-cli/credentials.json
+npx @ajmarquez99/gmail-cli send --to alice@example.com --subject "Hi" --body "Hello."
 ```
 
-Alternatively, set `GMAIL_USER` + `GMAIL_APP_PASSWORD` env vars (these take precedence).
-Override the config path with `GMAIL_CLI_CONFIG`.
+**One-liner installer**
+```bash
+curl -fsSL https://raw.githubusercontent.com/AJMarquez99/gmail-cli/main/install.sh | sh
+```
+
+**From source**
+```bash
+git clone https://github.com/AJMarquez99/gmail-cli
+cd gmail-cli
+npm install
+npm install -g .
+```
+
+> **Requires Node.js ≥ 20.**
+
+## Quickstart
+
+1. **Scaffold config files**
+
+   ```bash
+   gmail init
+   ```
+
+   Creates `~/.config/gmail-cli/` with `allowlist.json` and `config.json` and prints next steps.
+
+2. **Create a Gmail App Password** (requires 2FA on the account):
+   <https://myaccount.google.com/apppasswords>
+   — pick "Mail" / "Other"; you get a 16-character code shown as `xxxx xxxx xxxx xxxx`.
+
+3. **Save credentials** — write `~/.config/gmail-cli/credentials.json`:
+
+   ```json
+   { "user": "you@gmail.com", "appPassword": "xxxx xxxx xxxx xxxx" }
+   ```
+
+   ```bash
+   chmod 600 ~/.config/gmail-cli/credentials.json
+   ```
+
+   Or set env vars instead (these take precedence over the file):
+
+   ```bash
+   export GMAIL_USER=you@gmail.com
+   export GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"
+   ```
+
+4. **Add allowed recipients** to `~/.config/gmail-cli/allowlist.json` — see the
+   [fail-closed allowlist](#fail-closed-allowlist) section below.
+
+5. **Verify and send**
+
+   ```bash
+   gmail doctor          # check credentials + SMTP
+   gmail send --to alice@example.com --subject "Hello" --body "Hi there."
+   ```
+
+## Fail-closed allowlist
+
+> **`gmail send` only delivers to addresses on the allowlist (plus the configured account itself).
+> With no or empty allowlist, the first send to anyone other than yourself fails immediately
+> with exit code `3`. This is intentional — populate `allowlist.json` before sending to others.**
+
+Edit `~/.config/gmail-cli/allowlist.json` (or override path with `GMAIL_ALLOWLIST`):
+
+```json
+{
+  "recipients": [
+    { "email": "alice@example.com", "aliases": ["alice", "a"] },
+    { "email": "bob@example.com" },
+    { "email": "team@example.com" }
+  ]
+}
+```
+
+- `aliases` are optional. Address by alias and it expands to the real email:
+  `gmail send --to alice …` sends to `alice@example.com`.
+- Enforcement covers `--to`, `--cc`, and `--bcc`. If **any** recipient is not permitted, the
+  whole send is rejected (nothing is sent) and the command exits `3`.
+- `--dry-run` reports would-be-blocked recipients without throwing — useful for pre-flight checks.
+- Matching is case-insensitive.
+- `gmail allow list` shows the current entries; `gmail doctor` reports the count.
 
 ## Usage
 
@@ -52,8 +117,9 @@ gmail doctor
 gmail send --to alice@example.com --subject "Report" --body "All green."
 
 # Multiple recipients (repeat the flag or comma-separate), cc/bcc, reply-to
-gmail send --to a@x.com --to "b@x.com,c@x.com" --cc boss@x.com \
-  --subject "Update" --body "Done." --reply-to me@x.com
+gmail send --to alice@example.com --to "bob@example.com,team@example.com" \
+  --cc manager@example.com \
+  --subject "Update" --body "Done." --reply-to you@gmail.com
 
 # Send HTML explicitly
 gmail send --to alice@example.com --subject "Hi" --html "<b>Hello.</b>"
@@ -65,7 +131,7 @@ gmail send --to alice@example.com --subject "Report" --body "# Report\n\nAll gre
 gmail send --to alice@example.com --subject "Report" --body "# Report" --markdown --no-style
 
 # Pipe the body in (handy for agents / long content); --markdown works with piped input too
-generate-report | gmail send --to team@x.com --subject "Nightly report" --markdown
+generate-report | gmail send --to team@example.com --subject "Nightly report" --markdown
 
 # Attach files (repeatable; comma-separated ok; hard limit 25MB total, warning at 20MB)
 gmail send --to alice@example.com --subject "Invoice" --body "See attached." \
@@ -77,9 +143,9 @@ gmail send --to alice@example.com --subject "Re: Question" --body "Sure!" \
 
 # Set a display name on the From header
 gmail send --to alice@example.com --subject "Hi" --body "Hello." \
-  --from-name "Alejandro Marquez"
+  --from-name "Your Name"
 
-# Dry-run: assemble and preview without sending, logging, or enforcing the allowlist
+# Dry-run: assemble and preview without sending or logging; denied recipients are reported, not blocked
 gmail send --to alice@example.com --subject "Test" --body "Hello." --dry-run
 
 # Suppress the configured signature for this send
@@ -96,10 +162,41 @@ gmail log
 gmail sent --limit 5
 ```
 
-## Credential resolution (precedence)
+## Commands
 
-1. `GMAIL_USER` + `GMAIL_APP_PASSWORD` env vars
-2. `GMAIL_CLI_CONFIG` path, else `~/.config/gmail-cli/credentials.json`
+| Command | Description |
+|---|---|
+| `gmail init` | Scaffold `~/.config/gmail-cli/` (allowlist.json + config.json) and print setup steps. |
+| `gmail send` | Send an email (text/HTML/Markdown, to/cc/bcc, attachments, threading, dry-run). Enforces the allowlist. |
+| `gmail doctor` | Check credentials, verify Gmail SMTP, report allowlist size. |
+| `gmail allow list` | List allowed recipients and their aliases (read-only; edit the JSON by hand). |
+| `gmail log` | Show recent sent-mail log entries, newest first (alias: `gmail sent`). |
+
+Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients, bad attachment) · `3` recipient blocked by allowlist.
+
+`--dry-run` always exits `0` (even if recipients would be blocked — denials are reported in the output, not the exit code).
+
+## `gmail send` options reference
+
+| Flag | Description |
+|---|---|
+| `--to <addr>` | Recipient (repeatable; comma-separated ok) |
+| `--cc <addr>` | CC recipient (repeatable) |
+| `--bcc <addr>` | BCC recipient (repeatable) |
+| `--subject <text>` | Subject line |
+| `--body <text>` | Plain-text body (or pipe on stdin) |
+| `--html <html>` | HTML body (mutually exclusive with `--markdown`) |
+| `--markdown` | Render `--body` (or stdin) as Markdown → HTML with inline email styles; plain-text fallback is the raw Markdown |
+| `--no-style` | With `--markdown`: skip the inline email styler (raw `marked` HTML output) |
+| `--attach <path>` | File attachment (repeatable; comma-separated ok); hard limit 25MB total, warning at 20MB |
+| `--from-name <name>` | Display name on the `From` header (overrides `config.fromName`) |
+| `--reply-to <addr>` | `Reply-To` address (overrides `config.replyTo`) |
+| `--in-reply-to <messageId>` | `In-Reply-To` header; threads the email in Gmail |
+| `--references <id>` | `References` header entry (repeatable; comma-separated ok) |
+| `--no-signature` | Do not append the configured signature |
+| `--dry-run` | Assemble and preview the message without sending or logging; reports would-be-blocked recipients |
+| `--log-body` | Include body text in this send's log entry (overrides `config.sendLog.logBody`) |
+| `--no-log` | Do not append this send to the send log |
 
 ## Configuration (non-secret preferences)
 
@@ -109,11 +206,11 @@ win over config values.
 
 ```json
 {
-  "fromName": "Alejandro Marquez",
-  "replyTo": "alejandromarquez@live.com",
+  "fromName": "Your Name",
+  "replyTo": "you@gmail.com",
   "signature": {
-    "text": "--\nAlejandro",
-    "html": "<p>--<br>Alejandro</p>"
+    "text": "--\nYour Name",
+    "html": "<p>--<br>Your Name</p>"
   },
   "sendLog": {
     "enabled": true,
@@ -144,66 +241,10 @@ gmail sent          # alias for gmail log
 gmail log --limit 5 # show last 5
 ```
 
-## Recipient allowlist (security)
+## Credential resolution
 
-`gmail send` is **fail-closed**: it will only email addresses on an allowlist (plus the
-configured account itself, which is always implicitly allowed). With no allowlist file, the
-only permitted recipient is `agentic.marquez@gmail.com` — so a stray or hijacked agent can't
-mail strangers.
-
-Edit the list by hand at `~/.config/gmail-cli/allowlist.json` (override with `GMAIL_ALLOWLIST`):
-
-```json
-{
-  "recipients": [
-    { "email": "alice@example.com", "aliases": ["alice", "a"] },
-    { "email": "bob@example.com" }
-  ]
-}
-```
-
-- `aliases` are optional. Address by alias and it expands to the real email:
-  `gmail send --to alice …` sends to `alice@example.com`.
-- Enforcement covers `--to`, `--cc`, and `--bcc`. If **any** recipient isn't permitted, the
-  whole send is rejected (nothing is sent) and the command exits `3`.
-- `--dry-run` reports would-be-blocked recipients without throwing (useful for pre-flight checks).
-- Matching is case-insensitive. `gmail allow list` shows the current entries; `gmail doctor`
-  reports the count.
-
-## Commands
-
-| Command | Description |
-|---|---|
-| `gmail send`       | Send an email (text/HTML/Markdown, to/cc/bcc, attachments, threading, dry-run). Enforces the allowlist. |
-| `gmail doctor`     | Check credentials, verify Gmail SMTP, report allowlist size. |
-| `gmail allow list` | List allowed recipients and their aliases (read-only; edit the JSON by hand). |
-| `gmail log`        | Show recent sent-mail log entries, newest first (alias: `gmail sent`). |
-
-Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients, bad attachment) · `3` recipient blocked by allowlist.
-
-`--dry-run` always exits `0` (even if recipients would be blocked — denials are reported in the output, not the exit code).
-
-## `gmail send` options reference
-
-| Flag | Description |
-|---|---|
-| `--to <addr>` | Recipient (repeatable; comma-separated ok) |
-| `--cc <addr>` | CC recipient (repeatable) |
-| `--bcc <addr>` | BCC recipient (repeatable) |
-| `--subject <text>` | Subject line |
-| `--body <text>` | Plain-text body (or pipe on stdin) |
-| `--html <html>` | HTML body (mutually exclusive with `--markdown`) |
-| `--markdown` | Render `--body` (or stdin) as Markdown → HTML with inline email styles; plain-text fallback is the raw Markdown |
-| `--no-style` | With `--markdown`: skip the inline email styler (raw `marked` HTML output) |
-| `--attach <path>` | File attachment (repeatable; comma-separated ok); hard limit 25MB total, warning at 20MB |
-| `--from-name <name>` | Display name on the `From` header (overrides `config.fromName`) |
-| `--reply-to <addr>` | `Reply-To` address (overrides `config.replyTo`) |
-| `--in-reply-to <messageId>` | `In-Reply-To` header; threads the email in Gmail |
-| `--references <id>` | `References` header entry (repeatable; comma-separated ok) |
-| `--no-signature` | Do not append the configured signature |
-| `--dry-run` | Assemble and preview the message without sending or logging; reports would-be-blocked recipients |
-| `--log-body` | Include body text in this send's log entry (overrides `config.sendLog.logBody`) |
-| `--no-log` | Do not append this send to the send log |
+1. `GMAIL_USER` + `GMAIL_APP_PASSWORD` env vars (take precedence)
+2. `GMAIL_CLI_CONFIG` path, else `~/.config/gmail-cli/credentials.json`
 
 ## Environment variables
 
@@ -216,17 +257,6 @@ Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missi
 | `GMAIL_SEND_LOG` | Path to sent-mail JSONL log (default: `~/.config/gmail-cli/sent.jsonl`) |
 | `GMAIL_ALLOWLIST` | Path to allowlist JSON (default: `~/.config/gmail-cli/allowlist.json`) |
 
-## Develop
-
-```bash
-npm test        # vitest (watch)
-npm run test:run
-```
-
-Architecture mirrors `gsc-cli`: ESM, `commander`, dependency-injected command handlers
-(`src/commands/*.js`) for testability, JSON-default output. Credentials never get committed
-(`.gitignore` + creds live in `~/.config`).
-
 ## Security notes
 
 - The App Password is a long-lived secret with SMTP-send access to the account. Keep
@@ -235,3 +265,14 @@ Architecture mirrors `gsc-cli`: ESM, `commander`, dependency-injected command ha
   <https://myaccount.google.com/apppasswords>.
 - Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast
   radius of a misused App Password is limited to addresses you've explicitly approved.
+
+## Develop
+
+```bash
+npm run test:run   # run tests once
+npm test           # vitest watch mode
+```
+
+Architecture: ESM, `commander`, dependency-injected command handlers (`src/commands/*.js`)
+for testability, JSON-default output. Credentials never get committed (`.gitignore` + creds
+live in `~/.config`).

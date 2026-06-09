@@ -18,7 +18,7 @@ function makeDeps({ sendMail, allowlist = DEFAULT_ALLOWLIST, config = {} } = {})
     sendMail: sendMail || vi.fn(async () => ({ messageId: '<id@gmail>', accepted: ['x@y.com'], rejected: [] })),
   };
   return {
-    resolveCredentials: vi.fn(() => ({ user: 'agentic.marquez@gmail.com', appPassword: 'pw', source: 'env' })),
+    resolveCredentials: vi.fn(() => ({ user: 'you@example.com', appPassword: 'pw', source: 'env' })),
     loadAllowlist: vi.fn(() => allowlist),
     loadConfig: vi.fn(() => config),
     createTransport: vi.fn(() => transporter),
@@ -36,14 +36,14 @@ describe('runSend', () => {
     const out = await runSend({ to: 'x@y.com', subject: 'Hi', body: 'hello' }, deps);
     expect(deps._transporter.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
-        from: 'agentic.marquez@gmail.com',
+        from: 'you@example.com',
         to: ['x@y.com'],
         subject: 'Hi',
         text: 'hello',
       }),
     );
     expect(out).toEqual({
-      from: 'agentic.marquez@gmail.com',
+      from: 'you@example.com',
       to: ['x@y.com'],
       cc: [],
       bcc: [],
@@ -89,9 +89,9 @@ describe('runSend', () => {
 
   it('always allows sending to self even with an empty allowlist', async () => {
     const deps = makeDeps({ allowlist: { recipients: [] } });
-    await runSend({ to: 'agentic.marquez@gmail.com', subject: 'S', body: 'b' }, deps);
+    await runSend({ to: 'you@example.com', subject: 'S', body: 'b' }, deps);
     expect(deps._transporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: ['agentic.marquez@gmail.com'] }),
+      expect.objectContaining({ to: ['you@example.com'] }),
     );
   });
 

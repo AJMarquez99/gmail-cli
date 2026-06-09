@@ -4,7 +4,7 @@ import { runSend } from '../src/commands/send.js';
 function deps() {
   const transporter = { sendMail: vi.fn() };
   return {
-    resolveCredentials: () => ({ user: 'agentic.marquez@gmail.com', appPassword: 'pw' }),
+    resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
     loadAllowlist: () => ({ recipients: [{ email: 'x@y.com' }] }),
     loadConfig: () => ({}),
     createTransport: vi.fn(() => transporter),

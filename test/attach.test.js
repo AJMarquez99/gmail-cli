@@ -5,7 +5,7 @@ import { InvalidInputError } from '../src/lib/errors.js';
 function deps({ stat } = {}) {
   const transporter = { sendMail: vi.fn(async () => ({ messageId: '<id>', accepted: [], rejected: [] })) };
   return {
-    resolveCredentials: () => ({ user: 'agentic.marquez@gmail.com', appPassword: 'pw' }),
+    resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
     loadAllowlist: () => ({ recipients: [{ email: 'x@y.com' }] }),
     loadConfig: () => ({}),
     createTransport: () => transporter,
