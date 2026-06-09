@@ -1,19 +1,19 @@
 {
-  "name": "gmail-cli",
-  "version": "0.2.0",
-  "private": true,
+  "name": "@ajmarquez99/gmail-cli",
+  "version": "0.3.0",
+  "description": "Send-only Gmail CLI with a fail-closed recipient allowlist — markdown, attachments, dry-run, threading, and a send log.",
   "type": "module",
-  "description": "Personal Gmail send-only CLI for agentic sessions (gh/aws/gsc sibling). Sends mail via SMTP + App Password; reading stays on the claude.ai Gmail connector.",
-  "bin": {
-    "gmail": "./bin/gmail.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "scripts": {
-    "test": "vitest",
-    "test:run": "vitest run"
-  },
+  "bin": { "gmail": "./bin/gmail.js" },
+  "files": ["bin/", "src/", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "author": "Alejandro Marquez",
+  "repository": { "type": "git", "url": "https://github.com/AJMarquez99/gmail-cli.git" },
+  "homepage": "https://github.com/AJMarquez99/gmail-cli#readme",
+  "bugs": { "url": "https://github.com/AJMarquez99/gmail-cli/issues" },
+  "keywords": ["gmail", "email", "cli", "smtp", "nodemailer", "send", "allowlist", "agentic"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "test": "vitest", "test:run": "vitest run" },
   "dependencies": {
     "commander": "^12.1.0",
     "marked": "^18.0.5",
