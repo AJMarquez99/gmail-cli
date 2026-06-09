@@ -13,14 +13,19 @@ const DEFAULT_ALLOWLIST = {
   ],
 };
 
-function makeDeps({ sendMail, allowlist = DEFAULT_ALLOWLIST } = {}) {
+function makeDeps({ sendMail, allowlist = DEFAULT_ALLOWLIST, config = {} } = {}) {
   const transporter = {
     sendMail: sendMail || vi.fn(async () => ({ messageId: '<id@gmail>', accepted: ['x@y.com'], rejected: [] })),
   };
   return {
     resolveCredentials: vi.fn(() => ({ user: 'agentic.marquez@gmail.com', appPassword: 'pw', source: 'env' })),
     loadAllowlist: vi.fn(() => allowlist),
+    loadConfig: vi.fn(() => config),
     createTransport: vi.fn(() => transporter),
+    statFile: vi.fn(() => ({ isFile: () => true, size: 1024 })),
+    now: vi.fn(() => '2026-01-01T00:00:00.000Z'),
+    appendLog: vi.fn(),
+    readLog: vi.fn(() => []),
     _transporter: transporter,
   };
 }
@@ -37,6 +42,7 @@ describe('runSend', () => {
         text: 'hello',
       }),
     );
+    // TODO(Task 2): add attachments: [] here once runSend returns that field
     expect(out).toEqual({
       from: 'agentic.marquez@gmail.com',
       to: ['x@y.com'],
