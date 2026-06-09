@@ -120,4 +120,18 @@ describe('runSend', () => {
     const deps = makeDeps();
     await expect(runSend({ to: 'x@y.com', subject: 'S' }, deps)).rejects.toThrow(InvalidInputError);
   });
+
+  it('renders a markdown body to html with a plaintext fallback', async () => {
+    const deps = makeDeps();
+    await runSend({ to: 'x@y.com', subject: 'S', body: '# Hi', markdown: true }, deps);
+    const arg = deps._transporter.sendMail.mock.calls[0][0];
+    expect(arg.html).toContain('<h1');
+    expect(arg.text).toBe('# Hi');
+  });
+
+  it('rejects --markdown together with --html', async () => {
+    const deps = makeDeps();
+    await expect(runSend({ to: 'x@y.com', body: '# Hi', markdown: true, html: '<b>x</b>' }, deps))
+      .rejects.toThrow(InvalidInputError);
+  });
 });

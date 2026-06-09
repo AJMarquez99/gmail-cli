@@ -1,6 +1,7 @@
 import { basename, resolve as resolvePath } from 'node:path';
 import { InvalidInputError, RecipientNotAllowedError } from '../lib/errors.js';
 import { makeAllowChecker } from '../allowlist.js';
+import { renderMarkdown } from '../lib/markdown.js';
 
 const GMAIL_MAX_BYTES = 25 * 1024 * 1024;
 const WARN_BYTES = 20 * 1024 * 1024;
@@ -48,6 +49,9 @@ export async function runSend(opts, deps) {
   if (!opts.body && !opts.html) {
     throw new InvalidInputError('Empty message. Provide --body (text), --html, or pipe body on stdin.');
   }
+  if (opts.markdown && opts.html) {
+    throw new InvalidInputError('Use either --markdown or --html, not both.');
+  }
 
   const creds = deps.resolveCredentials();
 
@@ -72,6 +76,17 @@ export async function runSend(opts, deps) {
 
   const transporter = deps.createTransport(creds);
 
+  let text;
+  let html;
+  if (opts.markdown) {
+    const r = renderMarkdown(opts.body, { style: opts.style !== false });
+    html = r.html;
+    text = r.text;
+  } else {
+    if (opts.body) text = opts.body;
+    if (opts.html) html = opts.html;
+  }
+
   const message = {
     from: creds.user,
     to: toResolved,
@@ -79,8 +94,8 @@ export async function runSend(opts, deps) {
     bcc: bccResolved,
     subject: opts.subject || '',
   };
-  if (opts.body) message.text = opts.body;
-  if (opts.html) message.html = opts.html;
+  if (text != null) message.text = text;
+  if (html != null) message.html = html;
   if (opts.replyTo) message.replyTo = opts.replyTo;
   if (attachments.length) message.attachments = attachments.map(({ filename, path }) => ({ filename, path }));
 

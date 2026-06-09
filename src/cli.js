@@ -58,6 +58,8 @@ export function buildProgram(deps = defaultDeps) {
     .option('--subject <text>', 'subject line')
     .option('--body <text>', 'plain-text body (or pipe it on stdin)')
     .option('--html <html>', 'HTML body')
+    .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
+    .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
     .option('--reply-to <addr>', 'Reply-To address')
     .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
     .action(

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
+    "marked": "^18.0.5",
     "nodemailer": "^8.0.10"
   },
   "devDependencies": {
