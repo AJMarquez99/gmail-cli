@@ -31,3 +31,10 @@ export function formatAllowList(result) {
     .map((r) => (r.aliases.length ? `${r.email}  [${r.aliases.join(', ')}]` : r.email))
     .join('\n');
 }
+
+export function formatLog(result) {
+  if (!result.entries.length) return '(no sends logged yet)';
+  return result.entries
+    .map((e) => `${e.ts}  → ${[...(e.to||[]), ...(e.cc||[]), ...(e.bcc||[])].join(', ')}  ${e.subject || '(none)'}`)
+    .join('\n');
+}

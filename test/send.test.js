@@ -134,4 +134,19 @@ describe('runSend', () => {
     await expect(runSend({ to: 'x@y.com', body: '# Hi', markdown: true, html: '<b>x</b>' }, deps))
       .rejects.toThrow(InvalidInputError);
   });
+
+  it('appends a metadata-only send-log entry on success', async () => {
+    const deps = makeDeps();
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'secret body' }, deps);
+    expect(deps.appendLog).toHaveBeenCalledWith(expect.objectContaining({
+      ts: '2026-01-01T00:00:00.000Z', subject: 'S', messageId: '<id@gmail>',
+    }));
+    expect(deps.appendLog.mock.calls[0][0].text).toBeUndefined(); // body not logged by default
+  });
+
+  it('skips logging when --no-log is set', async () => {
+    const deps = makeDeps();
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b', noLog: true }, deps);
+    expect(deps.appendLog).not.toHaveBeenCalled();
+  });
 });

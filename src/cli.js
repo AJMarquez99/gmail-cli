@@ -3,8 +3,9 @@ import { defaultDeps } from './deps.js';
 import { runSend } from './commands/send.js';
 import { runDoctor } from './commands/doctor.js';
 import { runAllowList } from './commands/allow.js';
+import { runLog } from './commands/log.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDoctor, formatAllowList } from './lib/format.js';
+import { printJson, formatSend, formatDoctor, formatAllowList, formatLog } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -95,6 +96,13 @@ export function buildProgram(deps = defaultDeps) {
     .command('list')
     .description('List allowed recipients and their aliases')
     .action(handle(runAllowList, { table: formatAllowList }, deps));
+
+  program
+    .command('log')
+    .alias('sent')
+    .description('Show recent sent-mail log entries (newest first)')
+    .option('--limit <n>', 'max entries to show', '20')
+    .action(handle(runLog, { table: formatLog }, deps));
 
   return program;
 }

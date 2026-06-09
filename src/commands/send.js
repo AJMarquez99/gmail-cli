@@ -124,7 +124,7 @@ export async function runSend(opts, deps) {
 
   const info = await transporter.sendMail(message);
 
-  return {
+  const result = {
     from: message.from,
     to: toResolved,
     cc: ccResolved,
@@ -135,4 +135,20 @@ export async function runSend(opts, deps) {
     rejected: info.rejected || [],
     attachments: attachments.map(({ filename, bytes }) => ({ filename, bytes })),
   };
+
+  const logEnabled = !(opts.noLog || opts.log === false) && (config.sendLog ? config.sendLog.enabled !== false : true);
+  if (logEnabled) {
+    try {
+      const entry = {
+        ts: deps.now(), from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
+        subject: message.subject, messageId: info.messageId, attachments: attachments.map((a) => a.filename),
+      };
+      if (opts.logBody || (config.sendLog && config.sendLog.logBody)) { entry.text = text ?? null; entry.html = html ?? null; }
+      deps.appendLog(entry);
+    } catch (err) {
+      process.stderr.write(`warn: send-log write failed: ${err.message}\n`);
+    }
+  }
+
+  return result;
 }
