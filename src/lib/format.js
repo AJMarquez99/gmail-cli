@@ -39,6 +39,19 @@ export function formatLog(result) {
     .join('\n');
 }
 
+export function formatInit(result) {
+  const lines = [];
+  for (const p of result.created) lines.push(`created: ${p}`);
+  for (const p of result.skipped) lines.push(`exists:  ${p}`);
+  lines.push(`credentials: ${result.credentials}`);
+  if (result.nextSteps && result.nextSteps.length) {
+    lines.push('');
+    lines.push('Next steps:');
+    for (const [i, s] of result.nextSteps.entries()) lines.push(`  ${i + 1}. ${s}`);
+  }
+  return lines.join('\n');
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',
