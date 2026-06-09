@@ -38,3 +38,18 @@ export function formatLog(result) {
     .map((e) => `${e.ts}  → ${[...(e.to||[]), ...(e.cc||[]), ...(e.bcc||[])].join(', ')}  ${e.subject || '(none)'}`)
     .join('\n');
 }
+
+export function formatDryRun(r) {
+  const lines = [
+    'DRY RUN — nothing sent',
+    `from:    ${r.from}`,
+    `to:      ${[...r.to, ...r.cc, ...r.bcc].join(', ') || '(none)'}`,
+    `subject: ${r.subject || '(none)'}`,
+    `body:    ${(r.hasHtml ? 'html' : '') + (r.hasHtml && r.hasText ? '+' : '') + (r.hasText ? 'text' : '') || '(none)'}`,
+  ];
+  if (r.replyTo) lines.push(`reply-to: ${r.replyTo}`);
+  if (r.inReplyTo) lines.push(`in-reply-to: ${r.inReplyTo}`);
+  if (r.attachments.length) lines.push(`attachments: ${r.attachments.map((a) => `${a.filename} (${a.bytes}b)`).join(', ')}`);
+  if (r.denied.length) lines.push(`WOULD BE BLOCKED: ${r.denied.join(', ')}`);
+  return lines.join('\n');
+}

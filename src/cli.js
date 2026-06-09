@@ -5,7 +5,7 @@ import { runDoctor } from './commands/doctor.js';
 import { runAllowList } from './commands/allow.js';
 import { runLog } from './commands/log.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDoctor, formatAllowList, formatLog } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -67,11 +67,14 @@ export function buildProgram(deps = defaultDeps) {
     .option('--references <id>', 'References header id (repeatable; comma-separated ok)', collect, [])
     .option('--no-signature', 'do not append the configured signature')
     .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
+    .option('--dry-run', 'assemble and preview the message without sending or logging')
+    .option('--log-body', 'include the body in the send-log entry (off by default)')
+    .option('--no-log', 'do not append this send to the send log')
     .action(
       handle(
         runSend,
         {
-          table: formatSend,
+          table: (r) => (r.dryRun ? formatDryRun(r) : formatSend(r)),
           // If no body/html given, fall back to piped stdin.
           preprocess: async (opts) => {
             if (!opts.body && !opts.html) {

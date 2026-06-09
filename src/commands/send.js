@@ -47,7 +47,7 @@ export async function runSend(opts, deps) {
     throw new InvalidInputError('No recipients. Provide at least one of --to / --cc / --bcc.');
   }
   if (!opts.body && !opts.html) {
-    throw new InvalidInputError('Empty message. Provide --body (text), --html, or pipe body on stdin.');
+    throw new InvalidInputError('Empty message. Provide --body (text), --html, --markdown, or pipe body on stdin.');
   }
   if (opts.markdown && opts.html) {
     throw new InvalidInputError('Use either --markdown or --html, not both.');
@@ -56,8 +56,7 @@ export async function runSend(opts, deps) {
   const creds = deps.resolveCredentials();
   const config = deps.loadConfig();
 
-  // Enforce the allowlist (fail-closed): expand aliases to canonical emails and reject the
-  // whole send if any recipient isn't permitted — self is always implicitly allowed.
+  // Resolve recipients; collect denials but do not throw yet (dry-run needs to report them).
   const { resolve } = makeAllowChecker({ allowlist: deps.loadAllowlist(), self: creds.user });
   const denied = [];
   const allow = (list) =>
@@ -69,73 +68,69 @@ export async function runSend(opts, deps) {
   const toResolved = allow(to);
   const ccResolved = allow(cc);
   const bccResolved = allow(bcc);
-  if (denied.length) throw new RecipientNotAllowedError(denied);
 
-  const attachments = (opts.attach && opts.attach.length)
-    ? buildAttachments(toList(opts.attach), deps)
-    : [];
-
-  const transporter = deps.createTransport(creds);
-
+  // Body
   let text;
   let html;
-  if (opts.markdown) {
-    const r = renderMarkdown(opts.body, { style: opts.style !== false });
-    html = r.html;
-    text = r.text;
-  } else {
-    if (opts.body) text = opts.body;
-    if (opts.html) html = opts.html;
-  }
+  // Commander maps --no-style → opts.style === false; opts.noStyle covers programmatic/test use.
+  if (opts.markdown) { const r = renderMarkdown(opts.body, { style: !(opts.noStyle || opts.style === false) }); html = r.html; text = r.text; }
+  else { if (opts.body) text = opts.body; if (opts.html) html = opts.html; }
 
-  // Signature: appended after body assembly; suppressed by --no-signature (opts.noSignature)
-  // or when commander maps --no-signature → opts.signature === false.
+  // Signature (suppressed by --no-signature → opts.signature===false, or direct opts.noSignature)
   const suppressSig = opts.noSignature || opts.signature === false;
   const sig = (!suppressSig && config.signature) || null;
-  if (sig) {
-    if (text != null && sig.text) text = `${text}\n\n${sig.text}`;
-    if (html != null && sig.html) html = `${html}${sig.html}`;
-  }
+  if (sig) { if (text != null && sig.text) text = `${text}\n\n${sig.text}`; if (html != null && sig.html) html = `${html}${sig.html}`; }
 
-  // Identity
+  // Attachments
+  const attachments = (opts.attach && opts.attach.length) ? buildAttachments(toList(opts.attach), deps) : [];
+
+  // Identity + threading
   const fromName = opts.fromName || config.fromName;
   const replyTo = opts.replyTo || config.replyTo;
+  const refs = toList(opts.references);
 
   const message = {
     from: fromName ? `"${fromName}" <${creds.user}>` : creds.user,
-    to: toResolved,
-    cc: ccResolved,
-    bcc: bccResolved,
+    to: toResolved, cc: ccResolved, bcc: bccResolved,
     subject: opts.subject || '',
   };
   if (text != null) message.text = text;
   if (html != null) message.html = html;
   if (replyTo) message.replyTo = replyTo;
+  if (opts.inReplyTo) { message.inReplyTo = opts.inReplyTo; message.references = refs.length ? refs : [opts.inReplyTo]; }
+  else if (refs.length) message.references = refs;
   if (attachments.length) message.attachments = attachments.map(({ filename, path }) => ({ filename, path }));
 
-  // Threading
-  const refs = toList(opts.references);
-  if (opts.inReplyTo) {
-    message.inReplyTo = opts.inReplyTo;
-    message.references = refs.length ? refs : [opts.inReplyTo];
-  } else if (refs.length) {
-    message.references = refs;
+  const attachmentsOut = attachments.map(({ filename, bytes }) => ({ filename, bytes }));
+
+  // Dry-run: preview only. No transport, no send, no log. Report (not throw) denials.
+  if (opts.dryRun) {
+    return {
+      dryRun: true,
+      from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
+      subject: message.subject, replyTo: replyTo || null, inReplyTo: opts.inReplyTo || null,
+      hasHtml: html != null, hasText: text != null,
+      textPreview: text != null ? text.slice(0, 500) : null,
+      attachments: attachmentsOut,
+      allowed: [...toResolved, ...ccResolved, ...bccResolved].filter(Boolean),
+      denied,
+    };
   }
 
+  // Real send: enforce allowlist now.
+  if (denied.length) throw new RecipientNotAllowedError(denied);
+
+  const transporter = deps.createTransport(creds);
   const info = await transporter.sendMail(message);
 
   const result = {
-    from: message.from,
-    to: toResolved,
-    cc: ccResolved,
-    bcc: bccResolved,
-    subject: message.subject,
-    messageId: info.messageId,
-    accepted: info.accepted || [],
-    rejected: info.rejected || [],
-    attachments: attachments.map(({ filename, bytes }) => ({ filename, bytes })),
+    from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
+    subject: message.subject, messageId: info.messageId,
+    accepted: info.accepted || [], rejected: info.rejected || [],
+    attachments: attachmentsOut,
   };
 
+  // Commander maps --no-log → opts.log === false; opts.noLog covers programmatic/test use.
   const logEnabled = !(opts.noLog || opts.log === false) && (config.sendLog ? config.sendLog.enabled !== false : true);
   if (logEnabled) {
     try {
