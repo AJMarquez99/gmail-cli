@@ -56,14 +56,20 @@ export async function runSend(opts, deps) {
   const creds = deps.resolveCredentials();
   const config = deps.loadConfig();
 
+  // Determine whether allowlist enforcement is active. Default: ON (fail-closed).
+  // Turned off by: opts.noAllowlist, opts.allowlist === false, or config.allowlist.enforce === false.
+  const configEnforce = config.allowlist ? config.allowlist.enforce !== false : true;
+  const enforce = !(opts.noAllowlist || opts.allowlist === false) && configEnforce;
+
   // Resolve recipients; collect denials but do not throw yet (dry-run needs to report them).
   const { resolve } = makeAllowChecker({ allowlist: deps.loadAllowlist(), self: creds.user });
   const denied = [];
   const allow = (list) =>
     list.map((token) => {
       const r = resolve(token);
-      if (r.denied) denied.push(r.denied);
-      return r.email;
+      if (r.email) return r.email;                             // allowed or alias-expanded
+      if (enforce) { denied.push(r.denied); return undefined; } // will throw later
+      return r.denied;                                          // enforcement off: pass through as-is
     });
   const toResolved = allow(to);
   const ccResolved = allow(cc);
@@ -115,11 +121,17 @@ export async function runSend(opts, deps) {
       attachments: attachmentsOut,
       allowed: [...toResolved, ...ccResolved, ...bccResolved].filter(Boolean),
       denied,
+      allowlistEnforced: enforce,
     };
   }
 
-  // Real send: enforce allowlist now.
+  // Real send: enforce allowlist now (denied is only populated when enforce is true).
   if (denied.length) throw new RecipientNotAllowedError(denied);
+
+  // Warn on real sends when enforcement is off.
+  if (!enforce) {
+    process.stderr.write('warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).\n');
+  }
 
   const transporter = deps.createTransport(creds);
   const info = await transporter.sendMail(message);

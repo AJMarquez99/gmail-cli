@@ -3,14 +3,16 @@ import { runDoctor } from '../src/commands/doctor.js';
 import { MissingCredentialsError } from '../src/lib/errors.js';
 
 const allow = (n) => vi.fn(() => ({ recipients: Array.from({ length: n }, (_, i) => ({ email: `r${i}@x.com` })) }));
+const cfg = (obj = {}) => vi.fn(() => obj);
 
 describe('runDoctor', () => {
-  it('reports ok when credentials resolve and SMTP verifies, including allowlist size', async () => {
+  it('reports ok when credentials resolve and SMTP verifies, including allowlist size and enforce status', async () => {
     const transporter = { verify: vi.fn(async () => true) };
     const deps = {
       resolveCredentials: vi.fn(() => ({ user: 'a@gmail.com', appPassword: 'pw', source: 'env' })),
       createTransport: vi.fn(() => transporter),
       loadAllowlist: allow(2),
+      loadConfig: cfg({}),
     };
     const out = await runDoctor({}, deps);
     expect(out).toEqual({
@@ -20,6 +22,7 @@ describe('runDoctor', () => {
       credentials: 'ok',
       smtp: 'ok',
       allowlist: 2,
+      allowlistEnforced: true,
     });
   });
 
@@ -29,6 +32,7 @@ describe('runDoctor', () => {
       resolveCredentials: vi.fn(() => ({ user: 'a@gmail.com', appPassword: 'pw', source: 'env' })),
       createTransport: vi.fn(() => transporter),
       loadAllowlist: allow(0),
+      loadConfig: cfg({}),
     };
     const out = await runDoctor({}, deps);
     expect(out).toEqual({
@@ -38,6 +42,7 @@ describe('runDoctor', () => {
       credentials: 'ok',
       smtp: 'Invalid login: 535',
       allowlist: 0,
+      allowlistEnforced: true,
     });
   });
 
@@ -46,12 +51,27 @@ describe('runDoctor', () => {
       resolveCredentials: vi.fn(() => { throw new MissingCredentialsError('/p/creds.json'); }),
       createTransport: vi.fn(),
       loadAllowlist: allow(1),
+      loadConfig: cfg({}),
     };
     const out = await runDoctor({}, deps);
     expect(out.ok).toBe(false);
     expect(out.credentials).toBe('missing');
     expect(out.smtp).toBe('skipped');
     expect(out.allowlist).toBe(1);
+    expect(out.allowlistEnforced).toBe(true);
     expect(deps.createTransport).not.toHaveBeenCalled();
+  });
+
+  it('reports allowlistEnforced false when config sets allowlist.enforce to false', async () => {
+    const transporter = { verify: vi.fn(async () => true) };
+    const deps = {
+      resolveCredentials: vi.fn(() => ({ user: 'a@gmail.com', appPassword: 'pw', source: 'env' })),
+      createTransport: vi.fn(() => transporter),
+      loadAllowlist: allow(3),
+      loadConfig: cfg({ allowlist: { enforce: false } }),
+    };
+    const out = await runDoctor({}, deps);
+    expect(out.allowlistEnforced).toBe(false);
+    expect(out.allowlist).toBe(3);
   });
 });
