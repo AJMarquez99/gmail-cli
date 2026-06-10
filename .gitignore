@@ -12,5 +12,7 @@ sent.jsonl
 # npm pack artifact
 *.tgz
 
-# Agent project directory — kept local for now (not committed to this repo).
+# Agent project directory + local agent instructions — kept local for now
+# (not committed to this repo).
 .ai/
+/CLAUDE.md
