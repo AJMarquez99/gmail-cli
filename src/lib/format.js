@@ -56,6 +56,10 @@ export function formatLogin(r) {
   return `credentials written to ${r.path} for ${r.user} — verify with: gmail doctor`;
 }
 
+export function formatAllowMutation(r) {
+  return `${r.action}: ${r.email}${r.aliases?.length ? ' [' + r.aliases.join(', ') + ']' : ''}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',

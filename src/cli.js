@@ -2,12 +2,12 @@ import { Command } from 'commander';
 import { defaultDeps } from './deps.js';
 import { runSend } from './commands/send.js';
 import { runDoctor } from './commands/doctor.js';
-import { runAllowList } from './commands/allow.js';
+import { runAllowList, runAllowAdd, runAllowRemove } from './commands/allow.js';
 import { runLog } from './commands/log.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -22,10 +22,15 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function handle(fn, { table, preprocess } = {}, deps = defaultDeps) {
+function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
   return async (...actionArgs) => {
+    // Commander calls the action with (pos1, …, posN, optsObject, commandInstance).
     const cmd = actionArgs[actionArgs.length - 1];
-    const opts = cmd.opts();
+    const positionals = actionArgs.slice(0, -2);
+    const opts = { ...cmd.opts() };
+    (args || []).forEach((name, i) => {
+      opts[name] = positionals[i];
+    });
     let root = cmd;
     while (root.parent) root = root.parent;
     const globalOpts = root.opts();
@@ -114,6 +119,15 @@ export function buildProgram(deps = defaultDeps) {
     .command('list')
     .description('List allowed recipients and their aliases')
     .action(handle(runAllowList, { table: formatAllowList }, deps));
+  allow
+    .command('add <email>')
+    .description('Add a recipient to the allowlist')
+    .option('--alias <name>', 'alias (repeatable)', collect, [])
+    .action(handle(runAllowAdd, { table: formatAllowMutation, args: ['email'] }, deps));
+  allow
+    .command('remove <target>')
+    .description('Remove a recipient (by email or alias) from the allowlist')
+    .action(handle(runAllowRemove, { table: formatAllowMutation, args: ['target'] }, deps));
 
   program
     .command('log')
