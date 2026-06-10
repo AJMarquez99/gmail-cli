@@ -47,4 +47,15 @@ describe('resolveCredentials', () => {
       MissingCredentialsError,
     );
   });
+
+  it('reads the explicit path when provided, bypassing env-var shortcut', () => {
+    const readFile = vi.fn(() => JSON.stringify({ user: 'a@b.com', appPassword: 'pw' }));
+    const creds = resolveCredentials({
+      env: { HOME: '/h', GMAIL_USER: 'env@gmail.com', GMAIL_APP_PASSWORD: 'envpw' },
+      readFile,
+      path: '/custom/creds.json',
+    });
+    expect(readFile).toHaveBeenCalledWith('/custom/creds.json', 'utf8');
+    expect(creds).toEqual({ user: 'a@b.com', appPassword: 'pw', source: '/custom/creds.json' });
+  });
 });

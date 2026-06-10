@@ -15,12 +15,12 @@ function normalizeAppPassword(pw) {
 
 /**
  * Resolve send credentials. Precedence:
- *   1. GMAIL_USER + GMAIL_APP_PASSWORD env vars
- *   2. JSON file at resolveConfigPath() ({ user, appPassword })
+ *   1. GMAIL_USER + GMAIL_APP_PASSWORD env vars  (only when `path` is NOT provided)
+ *   2. JSON file at `path` (if provided) or resolveConfigPath() ({ user, appPassword })
  * Throws MissingCredentialsError if neither yields a usable pair.
  */
-export function resolveCredentials({ env = process.env, readFile = readFileSync } = {}) {
-  if (env.GMAIL_USER && env.GMAIL_APP_PASSWORD) {
+export function resolveCredentials({ env = process.env, readFile = readFileSync, path: explicitPath } = {}) {
+  if (!explicitPath && env.GMAIL_USER && env.GMAIL_APP_PASSWORD) {
     return {
       user: env.GMAIL_USER,
       appPassword: normalizeAppPassword(env.GMAIL_APP_PASSWORD),
@@ -28,7 +28,7 @@ export function resolveCredentials({ env = process.env, readFile = readFileSync 
     };
   }
 
-  const path = resolveConfigPath(env);
+  const path = explicitPath || resolveConfigPath(env);
   let raw;
   try {
     raw = readFile(path, 'utf8');

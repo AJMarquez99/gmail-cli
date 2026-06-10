@@ -30,4 +30,19 @@ describe('sendlog', () => {
   it('honors GMAIL_SEND_LOG override', () => {
     expect(resolveSendLogPath({ GMAIL_SEND_LOG: '/tmp/s.jsonl' })).toBe('/tmp/s.jsonl');
   });
+
+  it('appendSendLog uses the explicit path when provided', () => {
+    const append = vi.fn();
+    const mkdir = vi.fn();
+    appendSendLog({ a: 1 }, { env: { HOME: '/h' }, append, mkdir, path: '/custom/sent.jsonl' });
+    expect(mkdir).toHaveBeenCalledWith('/custom', { recursive: true });
+    expect(append).toHaveBeenCalledWith('/custom/sent.jsonl', '{"a":1}\n');
+  });
+
+  it('readSendLog uses the explicit path when provided', () => {
+    const readFile = vi.fn(() => '{"x":1}\n');
+    const out = readSendLog({ env: { HOME: '/h' }, readFile, path: '/custom/sent.jsonl' });
+    expect(readFile).toHaveBeenCalledWith('/custom/sent.jsonl', 'utf8');
+    expect(out).toEqual([{ x: 1 }]);
+  });
 });
