@@ -10,11 +10,11 @@ export function resolveAllowlistPath(env = process.env) {
  * Load the recipient allowlist. A missing file yields an empty list — combined with
  * fail-closed enforcement in runSend, that means "deny everyone but self" by default.
  */
-export function loadAllowlist({ env = process.env, readFile = readFileSync } = {}) {
-  const path = resolveAllowlistPath(env);
+export function loadAllowlist({ env = process.env, readFile = readFileSync, path } = {}) {
+  const resolvedPath = path || resolveAllowlistPath(env);
   let raw;
   try {
-    raw = readFile(path, 'utf8');
+    raw = readFile(resolvedPath, 'utf8');
   } catch (err) {
     if (err.code === 'ENOENT') return { recipients: [] };
     throw err;

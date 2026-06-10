@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runSend } from '../src/commands/send.js';
+import { resolveProfile } from '../src/profile.js';
 
 function deps({ config = {} } = {}) {
   const transporter = { sendMail: vi.fn(async () => ({ messageId: '<id>', accepted: [], rejected: [] })) };
   return {
     resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
+    resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
     loadAllowlist: () => ({ recipients: [{ email: 'x@y.com', aliases: ['x'] }] }),
     loadConfig: () => config,
     createTransport: () => transporter,

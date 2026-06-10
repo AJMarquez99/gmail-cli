@@ -2,10 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { runAllowList, runAllowAdd, runAllowRemove } from '../src/commands/allow.js';
 import { buildProgram } from '../src/cli.js';
 import { InvalidInputError } from '../src/lib/errors.js';
+import { resolveProfile } from '../src/profile.js';
 
 describe('runAllowList', () => {
   it('returns the allowlist recipients with a count', async () => {
     const deps = {
+      env: { HOME: '/h' },
+      resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config: {}, name }),
       loadAllowlist: vi.fn(() => ({
         recipients: [
           { email: 'a@x.com', aliases: ['a'] },
@@ -24,14 +27,19 @@ describe('runAllowList', () => {
   });
 
   it('reports an empty allowlist as zero recipients', async () => {
-    const deps = { loadAllowlist: vi.fn(() => ({ recipients: [] })) };
+    const deps = {
+      env: { HOME: '/h' },
+      resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config: {}, name }),
+      loadAllowlist: vi.fn(() => ({ recipients: [] })),
+    };
     expect(await runAllowList({}, deps)).toEqual({ count: 0, recipients: [] });
   });
 });
 
-function wDeps({ file } = {}) {
+function wDeps({ file, config = {} } = {}) {
   return {
     env: { HOME: '/h' },
+    resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
     readFile: vi.fn(() => {
       if (file == null) {
         const e = new Error('no');
@@ -107,12 +115,32 @@ describe('runAllowRemove', () => {
   });
 });
 
+describe('runAllowAdd / runAllowRemove — profile mode', () => {
+  it('writes to the profile-specific allowlist path when --profile is set', async () => {
+    const config = { profiles: { work: {} } };
+    const d = wDeps({ config });
+    await runAllowAdd({ email: 'bob@example.com', alias: [], profile: 'work' }, d);
+    const [writtenPath] = d.writeFile.mock.calls[0];
+    expect(writtenPath).toBe('/h/.config/gmail-cli/allowlist-work.json');
+  });
+
+  it('removes from the profile-specific allowlist path when --profile is set', async () => {
+    const config = { profiles: { work: {} } };
+    const file = JSON.stringify({ recipients: [{ email: 'bob@example.com' }] });
+    const d = wDeps({ config, file });
+    await runAllowRemove({ target: 'bob@example.com', profile: 'work' }, d);
+    const [writtenPath] = d.writeFile.mock.calls[0];
+    expect(writtenPath).toBe('/h/.config/gmail-cli/allowlist-work.json');
+  });
+});
+
 // Integration tests that drive the real Commander wiring end-to-end. These would have
 // caught the positional-arg signature bug that unit tests (calling handlers directly) missed.
 describe('allow add/remove CLI wiring', () => {
-  function progDeps({ file } = {}) {
+  function progDeps({ file, config = {} } = {}) {
     return {
       env: { HOME: '/h' },
+      resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
       readFile: vi.fn(() => {
         if (file == null) {
           const e = new Error('no');

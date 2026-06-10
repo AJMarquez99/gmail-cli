@@ -42,6 +42,13 @@ describe('loadAllowlist', () => {
     const readFile = vi.fn(() => JSON.stringify({}));
     expect(loadAllowlist({ env: { HOME: '/h' }, readFile })).toEqual({ recipients: [] });
   });
+
+  it('reads the explicit path when provided', () => {
+    const readFile = vi.fn(() => JSON.stringify({ recipients: [{ email: 'x@y.com' }] }));
+    const result = loadAllowlist({ env: { HOME: '/h' }, readFile, path: '/custom/allow.json' });
+    expect(readFile).toHaveBeenCalledWith('/custom/allow.json', 'utf8');
+    expect(result).toEqual({ recipients: [{ email: 'x@y.com' }] });
+  });
 });
 
 describe('makeAllowChecker', () => {

@@ -1,5 +1,4 @@
 import { dirname } from 'node:path';
-import { resolveConfigPath } from '../auth/credentials.js';
 import { InvalidInputError } from '../lib/errors.js';
 
 /**
@@ -9,11 +8,12 @@ import { InvalidInputError } from '../lib/errors.js';
  * SECURITY: the app password flows prompt → file only. It is never returned,
  * logged, or included in any error message.
  *
- * @param {object} opts  - { user?: string, force?: boolean }
- * @param {object} deps  - { env, fileExists, ensureDir, writeFile, prompt, promptHidden }
+ * @param {object} opts  - { user?: string, force?: boolean, profile?: string }
+ * @param {object} deps  - { env, resolveProfile, fileExists, ensureDir, writeFile, prompt, promptHidden }
  */
 export async function runLogin(opts, deps) {
-  const path = resolveConfigPath(deps.env);
+  const profile = deps.resolveProfile(opts.profile);
+  const path = profile.credentialsPath;
 
   if (deps.fileExists(path) && !opts.force) {
     throw new InvalidInputError(

@@ -53,16 +53,15 @@ export async function runSend(opts, deps) {
     throw new InvalidInputError('Use either --markdown or --html, not both.');
   }
 
-  const creds = deps.resolveCredentials();
-  const config = deps.loadConfig();
+  const profile = deps.resolveProfile(opts.profile);
+  const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
 
   // Determine whether allowlist enforcement is active. Default: ON (fail-closed).
-  // Turned off by: opts.noAllowlist, opts.allowlist === false, or config.allowlist.enforce === false.
-  const configEnforce = config.allowlist ? config.allowlist.enforce !== false : true;
-  const enforce = !(opts.noAllowlist || opts.allowlist === false) && configEnforce;
+  // Turned off by: opts.noAllowlist, opts.allowlist === false, or profile.allowlistEnforce === false.
+  const enforce = !(opts.noAllowlist || opts.allowlist === false) && profile.allowlistEnforce;
 
   // Resolve recipients; collect denials but do not throw yet (dry-run needs to report them).
-  const { resolve } = makeAllowChecker({ allowlist: deps.loadAllowlist(), self: creds.user });
+  const { resolve } = makeAllowChecker({ allowlist: deps.loadAllowlist({ path: profile.allowlistPath }), self: creds.user });
   const denied = [];
   const allow = (list) =>
     list.map((token) => {
@@ -84,15 +83,15 @@ export async function runSend(opts, deps) {
 
   // Signature (suppressed by --no-signature → opts.signature===false, or direct opts.noSignature)
   const suppressSig = opts.noSignature || opts.signature === false;
-  const sig = (!suppressSig && config.signature) || null;
+  const sig = (!suppressSig && profile.signature) || null;
   if (sig) { if (text != null && sig.text) text = `${text}\n\n${sig.text}`; if (html != null && sig.html) html = `${html}${sig.html}`; }
 
   // Attachments
   const attachments = (opts.attach && opts.attach.length) ? buildAttachments(toList(opts.attach), deps) : [];
 
   // Identity + threading
-  const fromName = opts.fromName || config.fromName;
-  const replyTo = opts.replyTo || config.replyTo;
+  const fromName = opts.fromName || profile.fromName;
+  const replyTo = opts.replyTo || profile.replyTo;
   const refs = toList(opts.references);
 
   const message = {
@@ -144,15 +143,15 @@ export async function runSend(opts, deps) {
   };
 
   // Commander maps --no-log → opts.log === false; opts.noLog covers programmatic/test use.
-  const logEnabled = !(opts.noLog || opts.log === false) && (config.sendLog ? config.sendLog.enabled !== false : true);
+  const logEnabled = !(opts.noLog || opts.log === false) && profile.sendLog.enabled !== false;
   if (logEnabled) {
     try {
       const entry = {
         ts: deps.now(), from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
         subject: message.subject, messageId: info.messageId, attachments: attachments.map((a) => a.filename),
       };
-      if (opts.logBody || (config.sendLog && config.sendLog.logBody)) { entry.text = text ?? null; entry.html = html ?? null; }
-      deps.appendLog(entry);
+      if (opts.logBody || profile.sendLog.logBody) { entry.text = text ?? null; entry.html = html ?? null; }
+      deps.appendLog(entry, { path: profile.sendLogPath });
     } catch (err) {
       process.stderr.write(`warn: send-log write failed: ${err.message}\n`);
     }

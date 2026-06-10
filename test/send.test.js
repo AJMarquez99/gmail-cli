@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runSend } from '../src/commands/send.js';
+import { buildProgram } from '../src/cli.js';
 import { InvalidInputError, RecipientNotAllowedError } from '../src/lib/errors.js';
+import { resolveProfile } from '../src/profile.js';
 
 const DEFAULT_ALLOWLIST = {
   recipients: [
@@ -19,6 +21,7 @@ function makeDeps({ sendMail, allowlist = DEFAULT_ALLOWLIST, config = {} } = {})
   };
   return {
     resolveCredentials: vi.fn(() => ({ user: 'you@example.com', appPassword: 'pw', source: 'env' })),
+    resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
     loadAllowlist: vi.fn(() => allowlist),
     loadConfig: vi.fn(() => config),
     createTransport: vi.fn(() => transporter),
@@ -138,9 +141,10 @@ describe('runSend', () => {
   it('appends a metadata-only send-log entry on success', async () => {
     const deps = makeDeps();
     await runSend({ to: 'x@y.com', subject: 'S', body: 'secret body' }, deps);
-    expect(deps.appendLog).toHaveBeenCalledWith(expect.objectContaining({
-      ts: '2026-01-01T00:00:00.000Z', subject: 'S', messageId: '<id@gmail>',
-    }));
+    expect(deps.appendLog).toHaveBeenCalledWith(
+      expect.objectContaining({ ts: '2026-01-01T00:00:00.000Z', subject: 'S', messageId: '<id@gmail>' }),
+      expect.objectContaining({ path: expect.any(String) }),
+    );
     expect(deps.appendLog.mock.calls[0][0].text).toBeUndefined(); // body not logged by default
   });
 
@@ -238,5 +242,113 @@ describe('runSend', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('runSend — profile mode', () => {
+  it('uses fromName from the active profile', async () => {
+    const config = {
+      defaultProfile: 'work',
+      profiles: {
+        work: { fromName: 'Work Account', allowlist: { enforce: true } },
+      },
+    };
+    const deps = makeDeps({ config });
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b' }, deps);
+    expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: '"Work Account" <you@example.com>' }),
+    );
+  });
+
+  it('does not block an unlisted recipient when profile enforce is false', async () => {
+    const config = {
+      defaultProfile: 'work',
+      profiles: {
+        work: { fromName: 'Work', allowlist: { enforce: false } },
+      },
+    };
+    const deps = makeDeps({ config });
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const out = await runSend({ to: 'unlisted@other.com', subject: 'S', body: 'b' }, deps);
+      expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: ['unlisted@other.com'] }),
+      );
+      expect(out.to).toEqual(['unlisted@other.com']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('uses the profile named by opts.profile', async () => {
+    const config = {
+      profiles: {
+        personal: { fromName: 'Personal Me' },
+        work: { fromName: 'Work Me' },
+      },
+    };
+    const deps = makeDeps({ config });
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b', profile: 'personal' }, deps);
+    expect(deps._transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: '"Personal Me" <you@example.com>' }),
+    );
+  });
+});
+
+describe('CLI --profile global flag', () => {
+  it('propagates global --profile to runSend via handle()', async () => {
+    const config = {
+      profiles: {
+        personal: { fromName: 'Personal Me', allowlist: { enforce: true } },
+        work: { fromName: 'Work Me', allowlist: { enforce: true } },
+      },
+    };
+    const transporter = {
+      sendMail: vi.fn(async () => ({ messageId: '<id@gmail>', accepted: ['x@y.com'], rejected: [] })),
+    };
+    const cliDeps = {
+      resolveCredentials: vi.fn(() => ({ user: 'you@example.com', appPassword: 'pw', source: 'env' })),
+      resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
+      loadAllowlist: vi.fn(() => DEFAULT_ALLOWLIST),
+      loadConfig: vi.fn(() => config),
+      createTransport: vi.fn(() => transporter),
+      statFile: vi.fn(() => ({ isFile: () => true, size: 1024 })),
+      now: vi.fn(() => '2026-01-01T00:00:00.000Z'),
+      appendLog: vi.fn(),
+      readLog: vi.fn(() => []),
+    };
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await buildProgram(cliDeps).parseAsync(
+        ['node', 'gmail', '--profile', 'work', 'send', '--to', 'x@y.com', '--subject', 'S', '--body', 'b'],
+        { from: 'node' },
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: '"Work Me" <you@example.com>' }),
+    );
+  });
+});
+
+describe('runSend — credential resolution branch (legacy vs profile)', () => {
+  it('calls resolveCredentials with {} (no path) in legacy mode so env-var shortcut applies', async () => {
+    // legacy: no profiles block
+    const deps = makeDeps({ config: {} });
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b' }, deps);
+    expect(deps.resolveCredentials).toHaveBeenCalledWith({});
+  });
+
+  it('calls resolveCredentials with { path: <profileCredPath> } in profile mode', async () => {
+    const config = {
+      defaultProfile: 'work',
+      profiles: { work: { credentialsPath: '/custom/work-creds.json' } },
+    };
+    const deps = makeDeps({ config });
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b' }, deps);
+    expect(deps.resolveCredentials).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/custom/work-creds.json' }),
+    );
   });
 });

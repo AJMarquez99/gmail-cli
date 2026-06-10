@@ -78,6 +78,87 @@ JSON files still works if you prefer).
 > Visit <https://myaccount.google.com/apppasswords> — pick "Mail" / "Other";
 > you get a 16-character code shown as `xxxx xxxx xxxx xxxx`.
 
+**Multiple accounts (optional):** see [Profiles](#profiles) to manage more than one Gmail account
+from the same CLI. The single-account setup above keeps working unchanged — profiles are opt-in.
+
+## Profiles
+
+Profiles let you use multiple Gmail accounts from the same CLI. Each profile owns its own
+credentials, allowlist, send log, and identity settings. **Without any profiles configured,
+the single-account setup works exactly as before — profiles are purely opt-in.**
+
+### What each profile owns
+
+| Resource | Single-account path | Profile path |
+|---|---|---|
+| Credentials | `credentials.json` | `credentials-<name>.json` |
+| Allowlist | `allowlist.json` | `allowlist-<name>.json` |
+| Send log | `sent.jsonl` | `sent-<name>.jsonl` |
+| Identity (fromName, replyTo, signature) | top-level config keys | `profiles.<name>.*` |
+| Allowlist enforcement | `allowlist.enforce` | `profiles.<name>.allowlist.enforce` |
+
+File paths can be overridden per-profile via `gmail config set` (dotted keys such as
+`profiles.work.credentialsPath ~/secrets/work-creds.json`).
+
+### Profile resolution
+
+When a command runs, the profile is selected by the first match in this ladder:
+
+1. `--profile <name>` flag
+2. `GMAIL_PROFILE` environment variable
+3. `config.defaultProfile` (set by `gmail profile use <name>`)
+4. Auto-select if exactly one profile is configured
+5. Legacy single-account mode (no profiles key in config)
+6. Error — multiple profiles configured and none selected: pass `--profile <name>` or set a default
+
+### `gmail profile` commands
+
+| Command | Description |
+|---|---|
+| `gmail profile add <name>` | Register a new profile. The first profile added automatically becomes the default. |
+| `gmail profile list` | List all profiles, marking the default. |
+| `gmail profile use <name>` | Set a profile as the default. |
+| `gmail profile remove <name>` | Unregister a profile from config. Its credential/allowlist/log files are left on disk. |
+
+### Per-account setup flow
+
+```bash
+# 1. Register the profile (first one added becomes the default)
+gmail profile add work
+
+# 2. Set up credentials for that profile
+gmail login --profile work
+
+# 3. Add allowed recipients
+gmail allow add colleague@example.com --alias colleague --profile work
+
+# 4. Set identity preferences
+gmail config set fromName "Work Name" --profile work
+
+# 5. Send
+gmail send --to colleague --subject "Hi" --body "Hello." --profile work
+```
+
+The `--profile` flag (or `GMAIL_PROFILE` env var) works on every command: `send`, `doctor`,
+`login`, `allow`, `log`, `config`, and `profile` subcommands.
+
+### Multi-account example
+
+```bash
+gmail profile add personal          # first → default
+gmail profile add work              # default unchanged (still personal)
+
+gmail login --profile personal      # stores credentials-personal.json
+gmail login --profile work          # stores credentials-work.json
+
+gmail profile use work              # switch default to work
+gmail doctor                        # checks work (the new default)
+gmail doctor --profile personal     # checks personal explicitly
+
+gmail send --to colleague --subject "Hi" --body "Hello." --profile work
+GMAIL_PROFILE=personal gmail send --to friend --subject "Hey" --body "Hi."
+```
+
 ## Fail-closed allowlist
 
 > **`gmail send` only delivers to addresses on the allowlist (plus the configured account itself).
@@ -198,6 +279,10 @@ gmail sent --limit 5
 | `gmail config get [key]` | Show one config key, or the whole config if no key is given. |
 | `gmail config unset <key>` | Remove a config key. |
 | `gmail log` | Show recent sent-mail log entries, newest first (alias: `gmail sent`). |
+| `gmail profile add <name>` | Register a new profile (first one added becomes the default). |
+| `gmail profile list` | List all profiles, marking the default. |
+| `gmail profile use <name>` | Set a profile as the default. |
+| `gmail profile remove <name>` | Unregister a profile from config (files left on disk). |
 
 Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients, bad attachment) · `3` recipient blocked by allowlist.
 

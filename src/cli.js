@@ -7,8 +7,9 @@ import { runLog } from './commands/log.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
+import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove } from './commands/profile.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -35,6 +36,8 @@ function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
     let root = cmd;
     while (root.parent) root = root.parent;
     const globalOpts = root.opts();
+    // Propagate global --profile into opts so every handler sees opts.profile.
+    if (opts.profile === undefined) opts.profile = globalOpts.profile;
     try {
       if (preprocess) await preprocess(opts);
       const result = await fn(opts, deps);
@@ -55,8 +58,9 @@ export function buildProgram(deps = defaultDeps) {
   program
     .name('gmail')
     .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
-    .version('0.5.0')
-    .option('--format <format>', 'output format: json|table', 'json');
+    .version('0.6.0')
+    .option('--format <format>', 'output format: json|table', 'json')
+    .option('--profile <name>', 'account profile to use');
 
   program
     .command('send')
@@ -152,6 +156,24 @@ export function buildProgram(deps = defaultDeps) {
     .command('unset <key>')
     .description('Remove a config key')
     .action(handle(runConfigUnset, { table: formatConfig, args: ['key'] }, deps));
+
+  const profileCmd = program.command('profile').description('Manage account profiles');
+  profileCmd
+    .command('add <name>')
+    .description('Register a new profile (first one becomes the default)')
+    .action(handle(runProfileAdd, { table: formatProfileMutation, args: ['name'] }, deps));
+  profileCmd
+    .command('list')
+    .description('List configured profiles')
+    .action(handle(runProfileList, { table: formatProfileList }, deps));
+  profileCmd
+    .command('use <name>')
+    .description('Set the default profile')
+    .action(handle(runProfileUse, { table: formatProfileMutation, args: ['name'] }, deps));
+  profileCmd
+    .command('remove <name>')
+    .description('Unregister a profile (its files are left on disk)')
+    .action(handle(runProfileRemove, { table: formatProfileMutation, args: ['name'] }, deps));
 
   return program;
 }

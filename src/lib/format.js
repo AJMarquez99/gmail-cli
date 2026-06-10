@@ -15,6 +15,7 @@ export function formatSend(result) {
 export function formatDoctor(result) {
   const lines = [
     `status:      ${result.ok ? 'ok' : 'FAILED'}`,
+    `profile:     ${result.profile || '(default)'}`,
     `account:     ${result.user || '(none)'}`,
     `source:      ${result.source || '(none)'}`,
     `credentials: ${result.credentials}`,
@@ -84,6 +85,28 @@ export function formatConfig(r) {
     if (lines.length === 0) lines.push('(no config set)');
   }
   return lines.join('\n');
+}
+
+export function formatProfileList(r) {
+  if (r.mode === 'single-account') return 'single-account mode (no profiles configured)';
+  return r.profiles
+    .map((p) => `${p.name}${p.default ? ' (default)' : ''}`)
+    .join('\n');
+}
+
+export function formatProfileMutation(r) {
+  if (r.action === 'created') {
+    return `created profile ${r.name}${r.default ? ' (now the default)' : ''}`;
+  }
+  if (r.action === 'default-set') {
+    return `default profile is now ${r.defaultProfile}`;
+  }
+  // removed
+  const fileList = r.filesKept.join(', ');
+  const defaultNote = r.newDefault
+    ? ` · default is now ${r.newDefault}`
+    : ' · no default set';
+  return `removed profile ${r.name} — files left on disk: ${fileList}${defaultNote}`;
 }
 
 export function formatDryRun(r) {

@@ -6,17 +6,18 @@ export function resolveSendLogPath(env = process.env) {
   return join(env.HOME || '', '.config', 'gmail-cli', 'sent.jsonl');
 }
 
-export function appendSendLog(entry, { env = process.env, append = appendFileSync, mkdir = mkdirSync } = {}) {
-  const path = resolveSendLogPath(env);
-  mkdir(dirname(path), { recursive: true });
-  append(path, JSON.stringify(entry) + '\n');
+export function appendSendLog(entry, { env = process.env, append = appendFileSync, mkdir = mkdirSync, path } = {}) {
+  const resolvedPath = path || resolveSendLogPath(env);
+  mkdir(dirname(resolvedPath), { recursive: true });
+  append(resolvedPath, JSON.stringify(entry) + '\n');
 }
 
 /** Read the last `limit` entries, newest-first. Missing file → []. */
-export function readSendLog({ env = process.env, readFile = readFileSync, limit = 20 } = {}) {
+export function readSendLog({ env = process.env, readFile = readFileSync, limit = 20, path } = {}) {
+  const resolvedPath = path || resolveSendLogPath(env);
   let raw;
   try {
-    raw = readFile(resolveSendLogPath(env), 'utf8');
+    raw = readFile(resolvedPath, 'utf8');
   } catch (err) {
     if (err.code === 'ENOENT') return [];
     throw err;

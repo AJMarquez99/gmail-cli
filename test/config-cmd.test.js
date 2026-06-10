@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runConfigSet, runConfigGet, runConfigUnset } from '../src/commands/config.js';
 import { buildProgram } from '../src/cli.js';
+import { resolveProfile } from '../src/profile.js';
 
-function deps({ file } = {}) {
+function deps({ file, config: cfgForProfile = {} } = {}) {
   return {
     env: { HOME: '/h' },
+    resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config: cfgForProfile, name }),
     readFile: vi.fn(() => {
       if (file == null) {
         const e = new Error('no');
@@ -78,5 +80,75 @@ describe('config CLI wiring', () => {
       spy.mockRestore();
     }
     expect(JSON.parse(d.writeFile.mock.calls[0][1])).toEqual({ fromName: 'CLI Name' });
+  });
+
+  it('writes profiles.<name>.<key> when --profile is passed globally before subcommand', async () => {
+    // --profile is a global option; commander accepts it before the subcommand.
+    // Pass config so resolveProfile is wired with work profile; override readFile to
+    // return the matching config JSON so readJson in config.js sees the profile too.
+    const profileConfig = { profiles: { work: {} } };
+    const d = deps({ config: profileConfig });
+    d.readFile = vi.fn(() => JSON.stringify(profileConfig));
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await buildProgram(d).parseAsync(
+        ['node', 'gmail', '--profile', 'work', 'config', 'set', 'fromName', 'W'],
+        { from: 'node' },
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    const w = JSON.parse(d.writeFile.mock.calls[0][1]);
+    expect(w.profiles.work.fromName).toBe('W');
+  });
+});
+
+describe('runConfigSet — profile mode', () => {
+  it('writes key under profiles.<name> for a named profile', async () => {
+    const d = deps({ config: { profiles: { work: {} } } });
+    const out = await runConfigSet({ key: 'fromName', value: 'W', profile: 'work' }, d);
+    expect(written(d)).toEqual({ profiles: { work: { fromName: 'W' } } });
+    expect(out.unknownKey).toBeFalsy();
+  });
+
+  it('preserves other profiles when setting a key on one profile', async () => {
+    const profileConfig = { profiles: { work: {}, home: { fromName: 'Home' } } };
+    const d = deps({ file: JSON.stringify(profileConfig), config: profileConfig });
+    await runConfigSet({ key: 'fromName', value: 'Work', profile: 'work' }, d);
+    const w = written(d);
+    expect(w.profiles.work.fromName).toBe('Work');
+    expect(w.profiles.home.fromName).toBe('Home');
+  });
+
+  it('coerces booleans under the profile path', async () => {
+    const d = deps({ config: { profiles: { work: {} } } });
+    await runConfigSet({ key: 'allowlist.enforce', value: 'false', profile: 'work' }, d);
+    expect(written(d)).toEqual({ profiles: { work: { allowlist: { enforce: false } } } });
+  });
+});
+
+describe('runConfigGet — profile mode', () => {
+  it('returns key value under profiles.<name> for a named profile', async () => {
+    const profileConfig = { profiles: { work: { fromName: 'W' } } };
+    const d = deps({ file: JSON.stringify(profileConfig), config: profileConfig });
+    const out = await runConfigGet({ key: 'fromName', profile: 'work' }, d);
+    expect(out).toEqual({ key: 'fromName', value: 'W' });
+  });
+
+  it('returns the whole profile object with profile name when no key', async () => {
+    const profileConfig = { profiles: { work: { fromName: 'W' } } };
+    const d = deps({ file: JSON.stringify(profileConfig), config: profileConfig });
+    const out = await runConfigGet({ profile: 'work' }, d);
+    expect(out).toEqual({ profile: 'work', config: { fromName: 'W' } });
+  });
+});
+
+describe('runConfigUnset — profile mode', () => {
+  it('removes key under profiles.<name>', async () => {
+    const profileConfig = { profiles: { work: { fromName: 'W', replyTo: 'r@x.com' } } };
+    const d = deps({ file: JSON.stringify(profileConfig), config: profileConfig });
+    await runConfigUnset({ key: 'fromName', profile: 'work' }, d);
+    const w = written(d);
+    expect(w.profiles.work).toEqual({ replyTo: 'r@x.com' });
   });
 });
