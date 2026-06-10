@@ -5,11 +5,13 @@ import { createGmailTransport } from './transport.js';
 import { loadAllowlist } from './allowlist.js';
 import { loadConfig } from './config.js';
 import { appendSendLog, readSendLog } from './lib/sendlog.js';
+import { resolveProfile } from './profile.js';
 
 // Default wiring injected into command handlers. Tests substitute their own.
 export const defaultDeps = {
   env: process.env,
   resolveCredentials: () => resolveCredentials({}),
+  resolveProfile: (name) => resolveProfile({ env: process.env, config: loadConfig({}), name }),
   createTransport: (creds) => createGmailTransport(creds),
   loadAllowlist: () => loadAllowlist({}),
   loadConfig: () => loadConfig({}),
