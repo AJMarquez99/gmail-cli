@@ -159,6 +159,16 @@ describe('runProfileRemove', () => {
     expect(out.newDefault).toBeNull();
   });
 
+  it('removes the last/only profile — profiles becomes empty, defaultProfile cleared', async () => {
+    const cfg = JSON.stringify({ profiles: { work: {} }, defaultProfile: 'work' });
+    const d = deps({ file: cfg, config: { profiles: { work: {} }, defaultProfile: 'work' } });
+    const out = await runProfileRemove({ name: 'work' }, d);
+    const w = written(d);
+    expect(w.profiles).toEqual({});
+    expect(w.defaultProfile).toBeUndefined(); // cleared entirely
+    expect(out.newDefault).toBeNull();
+  });
+
   it('throws InvalidInputError for an unknown profile', async () => {
     const cfg = JSON.stringify({ profiles: { work: {} } });
     const d = deps({ file: cfg, config: { profiles: { work: {} } } });
