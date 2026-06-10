@@ -2,11 +2,13 @@ import { Command } from 'commander';
 import { defaultDeps } from './deps.js';
 import { runSend } from './commands/send.js';
 import { runDoctor } from './commands/doctor.js';
-import { runAllowList } from './commands/allow.js';
+import { runAllowList, runAllowAdd, runAllowRemove } from './commands/allow.js';
 import { runLog } from './commands/log.js';
 import { runInit } from './commands/init.js';
+import { runLogin } from './commands/login.js';
+import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -21,10 +23,15 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function handle(fn, { table, preprocess } = {}, deps = defaultDeps) {
+function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
   return async (...actionArgs) => {
+    // Commander calls the action with (pos1, …, posN, optsObject, commandInstance).
     const cmd = actionArgs[actionArgs.length - 1];
-    const opts = cmd.opts();
+    const positionals = actionArgs.slice(0, -2);
+    const opts = { ...cmd.opts() };
+    (args || []).forEach((name, i) => {
+      opts[name] = positionals[i];
+    });
     let root = cmd;
     while (root.parent) root = root.parent;
     const globalOpts = root.opts();
@@ -48,7 +55,7 @@ export function buildProgram(deps = defaultDeps) {
   program
     .name('gmail')
     .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
-    .version('0.4.0')
+    .version('0.5.0')
     .option('--format <format>', 'output format: json|table', 'json');
 
   program
@@ -99,13 +106,29 @@ export function buildProgram(deps = defaultDeps) {
     .description('Scaffold ~/.config/gmail-cli/ config files and print setup steps')
     .action(handle(runInit, { table: formatInit }, deps));
 
+  program
+    .command('login')
+    .description('Set up Gmail credentials — prompts for the App Password (hidden), writes credentials.json (chmod 600)')
+    .option('--user <email>', 'account email (otherwise prompted)')
+    .option('--force', 'overwrite existing credentials')
+    .action(handle(runLogin, { table: formatLogin }, deps));
+
   const allow = program
     .command('allow')
-    .description('Inspect the recipient allowlist (edit ~/.config/gmail-cli/allowlist.json by hand)');
+    .description('Manage the recipient allowlist (list / add / remove)');
   allow
     .command('list')
     .description('List allowed recipients and their aliases')
     .action(handle(runAllowList, { table: formatAllowList }, deps));
+  allow
+    .command('add <email>')
+    .description('Add a recipient to the allowlist')
+    .option('--alias <name>', 'alias (repeatable)', collect, [])
+    .action(handle(runAllowAdd, { table: formatAllowMutation, args: ['email'] }, deps));
+  allow
+    .command('remove <target>')
+    .description('Remove a recipient (by email or alias) from the allowlist')
+    .action(handle(runAllowRemove, { table: formatAllowMutation, args: ['target'] }, deps));
 
   program
     .command('log')
@@ -113,6 +136,22 @@ export function buildProgram(deps = defaultDeps) {
     .description('Show recent sent-mail log entries (newest first)')
     .option('--limit <n>', 'max entries to show', '20')
     .action(handle(runLog, { table: formatLog }, deps));
+
+  const config = program
+    .command('config')
+    .description('Get/set non-secret preferences in config.json');
+  config
+    .command('set <key> <value>')
+    .description('Set a config key (dotted; true/false coerced)')
+    .action(handle(runConfigSet, { table: formatConfig, args: ['key', 'value'] }, deps));
+  config
+    .command('get [key]')
+    .description('Show a config key, or the whole config')
+    .action(handle(runConfigGet, { table: formatConfig, args: ['key'] }, deps));
+  config
+    .command('unset <key>')
+    .description('Remove a config key')
+    .action(handle(runConfigUnset, { table: formatConfig, args: ['key'] }, deps));
 
   return program;
 }
