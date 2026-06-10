@@ -115,7 +115,7 @@ export function buildProgram(deps = defaultDeps) {
 
   const allow = program
     .command('allow')
-    .description('Inspect the recipient allowlist (edit ~/.config/gmail-cli/allowlist.json by hand)');
+    .description('Manage the recipient allowlist (list / add / remove)');
   allow
     .command('list')
     .description('List allowed recipients and their aliases')
