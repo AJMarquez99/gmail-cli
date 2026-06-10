@@ -52,6 +52,10 @@ export function formatInit(result) {
   return lines.join('\n');
 }
 
+export function formatLogin(r) {
+  return `credentials written to ${r.path} for ${r.user} — verify with: gmail doctor`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',

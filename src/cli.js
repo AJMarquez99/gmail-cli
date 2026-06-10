@@ -5,8 +5,9 @@ import { runDoctor } from './commands/doctor.js';
 import { runAllowList } from './commands/allow.js';
 import { runLog } from './commands/log.js';
 import { runInit } from './commands/init.js';
+import { runLogin } from './commands/login.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -98,6 +99,13 @@ export function buildProgram(deps = defaultDeps) {
     .command('init')
     .description('Scaffold ~/.config/gmail-cli/ config files and print setup steps')
     .action(handle(runInit, { table: formatInit }, deps));
+
+  program
+    .command('login')
+    .description('Set up Gmail credentials — prompts for the App Password (hidden), writes credentials.json (chmod 600)')
+    .option('--user <email>', 'account email (otherwise prompted)')
+    .option('--force', 'overwrite existing credentials')
+    .action(handle(runLogin, { table: formatLogin }, deps));
 
   const allow = program
     .command('allow')
