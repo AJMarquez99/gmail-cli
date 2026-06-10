@@ -40,52 +40,52 @@ npm install -g .
 
 ## Quickstart
 
-1. **Scaffold config files**
+All setup steps are now command-driven — no hand-editing JSON required (though hand-editing the
+JSON files still works if you prefer).
+
+1. **Set up credentials** — prompts for your Gmail address and App Password (hidden):
 
    ```bash
-   gmail init
+   gmail login
    ```
 
-   Creates `~/.config/gmail-cli/` with `allowlist.json` and `config.json` and prints next steps.
+   This writes `~/.config/gmail-cli/credentials.json` at `chmod 600`.
+   See [Security notes](#security-notes) for guidance on App Passwords.
 
-2. **Create a Gmail App Password** (requires 2FA on the account):
-   <https://myaccount.google.com/apppasswords>
-   — pick "Mail" / "Other"; you get a 16-character code shown as `xxxx xxxx xxxx xxxx`.
+   Optional flags: `--user you@gmail.com` (skip the email prompt); `--force` to overwrite existing
+   credentials.
 
-3. **Save credentials** — write `~/.config/gmail-cli/credentials.json`:
-
-   ```json
-   { "user": "you@gmail.com", "appPassword": "xxxx xxxx xxxx xxxx" }
-   ```
+2. **Add an allowed recipient** (with an optional short alias):
 
    ```bash
-   chmod 600 ~/.config/gmail-cli/credentials.json
+   gmail allow add alice@example.com --alias alice
    ```
 
-   Or set env vars instead (these take precedence over the file):
+3. **Set non-secret preferences** (optional):
 
    ```bash
-   export GMAIL_USER=you@gmail.com
-   export GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"
+   gmail config set fromName "Your Name"
    ```
 
-4. **Add allowed recipients** to `~/.config/gmail-cli/allowlist.json` — see the
-   [fail-closed allowlist](#fail-closed-allowlist) section below.
-
-5. **Verify and send**
+4. **Verify and send**:
 
    ```bash
-   gmail doctor          # check credentials + SMTP
-   gmail send --to alice@example.com --subject "Hello" --body "Hi there."
+   gmail doctor
+   gmail send --to alice --subject "Hello" --body "Hi there."
    ```
+
+> **Getting an App Password:** requires 2FA on the account.
+> Visit <https://myaccount.google.com/apppasswords> — pick "Mail" / "Other";
+> you get a 16-character code shown as `xxxx xxxx xxxx xxxx`.
 
 ## Fail-closed allowlist
 
 > **`gmail send` only delivers to addresses on the allowlist (plus the configured account itself).
 > With no or empty allowlist, the first send to anyone other than yourself fails immediately
-> with exit code `3`. This is intentional — populate `allowlist.json` before sending to others.**
+> with exit code `3`. This is intentional — populate the allowlist before sending to others.**
 
-Edit `~/.config/gmail-cli/allowlist.json` (or override path with `GMAIL_ALLOWLIST`):
+Use `gmail allow add` / `gmail allow remove` to manage it from the CLI, or edit
+`~/.config/gmail-cli/allowlist.json` directly (override path with `GMAIL_ALLOWLIST`):
 
 ```json
 {
@@ -119,16 +119,12 @@ A stderr warning is emitted on every real send with enforcement off:
 warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).
 ```
 
-**Persistent (config):** set `allowlist.enforce` to `false` in `config.json`:
-```json
-{
-  "allowlist": {
-    "enforce": false
-  }
-}
+**Persistent (config):**
+```bash
+gmail config set allowlist.enforce false
 ```
 
-The `--no-allowlist` flag overrides the config for a single send regardless of what the config says. To re-enable, set `allowlist.enforce: true` (or remove the key) and drop `--no-allowlist`.
+The `--no-allowlist` flag overrides the config for a single send regardless of what the config says. To re-enable, run `gmail config set allowlist.enforce true` (or `gmail config unset allowlist.enforce`) and drop `--no-allowlist`.
 
 ## Usage
 
@@ -192,14 +188,59 @@ gmail sent --limit 5
 | Command | Description |
 |---|---|
 | `gmail init` | Scaffold `~/.config/gmail-cli/` (allowlist.json + config.json) and print setup steps. |
+| `gmail login` | Guided credential setup — prompts for email and App Password (hidden), writes credentials.json at chmod 600. |
 | `gmail send` | Send an email (text/HTML/Markdown, to/cc/bcc, attachments, threading, dry-run). Enforces the allowlist. |
 | `gmail doctor` | Check credentials, verify Gmail SMTP, report allowlist size. |
-| `gmail allow list` | List allowed recipients and their aliases (read-only; edit the JSON by hand). |
+| `gmail allow list` | List allowed recipients and their aliases (read-only). |
+| `gmail allow add <email>` | Add a recipient to the allowlist (idempotent; merges aliases if entry already exists). |
+| `gmail allow remove <email\|alias>` | Remove a recipient by email address or alias. |
+| `gmail config set <key> <value>` | Set a config preference (dotted key; `true`/`false` coerced to boolean). |
+| `gmail config get [key]` | Show one config key, or the whole config if no key is given. |
+| `gmail config unset <key>` | Remove a config key. |
 | `gmail log` | Show recent sent-mail log entries, newest first (alias: `gmail sent`). |
 
 Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients, bad attachment) · `3` recipient blocked by allowlist.
 
 `--dry-run` always exits `0` (even if recipients would be blocked — denials are reported in the output, not the exit code).
+
+## `gmail login` options reference
+
+| Flag | Description |
+|---|---|
+| `--user <email>` | Gmail address — skips the interactive email prompt |
+| `--force` | Overwrite existing credentials without error |
+
+**Security:** the App Password prompt has echo off — the password is never echoed to the terminal,
+never written to logs, and never passed as a CLI flag. It flows directly from the prompt to
+`credentials.json`. Verify the setup afterward with `gmail doctor`.
+
+## `gmail allow` commands reference
+
+| Command | Description |
+|---|---|
+| `gmail allow add <email> [--alias <name>]` | Add a recipient. `--alias` is repeatable. If the email already exists, new aliases are merged in; duplicate aliases are silently skipped. An alias that already maps to a **different** email is refused. |
+| `gmail allow remove <email\|alias>` | Remove the entry whose email or alias matches the target (case-insensitive). Exits `2` if not found. |
+| `gmail allow list` | Read-only view of all entries. |
+
+## `gmail config` commands reference
+
+| Command | Description |
+|---|---|
+| `gmail config set <key> <value>` | Write a value. Dotted keys (`signature.text`) create/update nested objects. `true`/`false` strings are coerced to booleans. Unknown keys are written with a warning. |
+| `gmail config get [key]` | Print a single key's value, or the whole config if `[key]` is omitted. |
+| `gmail config unset <key>` | Delete a key (and its subtree if dotted). |
+
+### Known config keys
+
+| Key | Effect | Override flag |
+|---|---|---|
+| `fromName` | Display name on the `From` header | `--from-name` |
+| `replyTo` | Default `Reply-To` address | `--reply-to` |
+| `signature.text` | Plain-text signature appended after a blank line | `--no-signature` |
+| `signature.html` | HTML signature appended after a blank line | `--no-signature` |
+| `sendLog.enabled` | `false` disables the send log globally | `--no-log` (per-send) |
+| `sendLog.logBody` | `true` includes body text in every log entry | `--log-body` (per-send) |
+| `allowlist.enforce` | `false` disables allowlist enforcement globally (default: `true`) | `--no-allowlist` (per-send) |
 
 ## `gmail send` options reference
 
@@ -209,7 +250,7 @@ Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missi
 | `--cc <addr>` | CC recipient (repeatable) |
 | `--bcc <addr>` | BCC recipient (repeatable) |
 | `--subject <text>` | Subject line |
-| `--body <text>` | Plain-text body (or pipe on stdin) |
+| `--body <text>` | Plain-text body (or pipe it on stdin) |
 | `--html <html>` | HTML body (mutually exclusive with `--markdown`) |
 | `--markdown` | Render `--body` (or stdin) as Markdown → HTML with inline email styles; plain-text fallback is the raw Markdown |
 | `--no-style` | With `--markdown`: skip the inline email styler (raw `marked` HTML output) |
@@ -248,14 +289,8 @@ win over config values.
 }
 ```
 
-| Field | Effect | Override flag |
-|---|---|---|
-| `fromName` | Display name on the `From` header | `--from-name` |
-| `replyTo` | Default `Reply-To` address | `--reply-to` |
-| `signature.text` / `signature.html` | Appended to text/HTML body after a blank line | `--no-signature` |
-| `sendLog.enabled` | `false` disables the log globally | `--no-log` (per-send) |
-| `sendLog.logBody` | `true` includes body text in every log entry | `--log-body` (per-send) |
-| `allowlist.enforce` | `false` disables allowlist enforcement globally (default: `true`) | `--no-allowlist` (per-send) |
+Use `gmail config set/get/unset` to manage these without hand-editing. Hand-editing the JSON
+file directly also works.
 
 ## Send log
 
@@ -289,8 +324,11 @@ gmail log --limit 5 # show last 5
 
 ## Security notes
 
+- **`gmail login` uses a hidden prompt** — the App Password is never echoed to the terminal,
+  never passed as a CLI flag, and never written to logs. It goes directly from the prompt to
+  `credentials.json`.
 - The App Password is a long-lived secret with SMTP-send access to the account. Keep
-  `credentials.json` at `chmod 600`; never commit it.
+  `credentials.json` at `chmod 600` (`gmail login` does this automatically); never commit it.
 - Scope is send-only by construction (SMTP). Revoke anytime at
   <https://myaccount.google.com/apppasswords>.
 - Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast

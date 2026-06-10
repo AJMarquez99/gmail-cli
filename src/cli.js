@@ -55,7 +55,7 @@ export function buildProgram(deps = defaultDeps) {
   program
     .name('gmail')
     .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
-    .version('0.4.0')
+    .version('0.5.0')
     .option('--format <format>', 'output format: json|table', 'json');
 
   program
