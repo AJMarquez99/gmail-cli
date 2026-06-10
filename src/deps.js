@@ -10,15 +10,15 @@ import { resolveProfile } from './profile.js';
 // Default wiring injected into command handlers. Tests substitute their own.
 export const defaultDeps = {
   env: process.env,
-  resolveCredentials: () => resolveCredentials({}),
+  resolveCredentials: (o) => resolveCredentials(o || {}),
   resolveProfile: (name) => resolveProfile({ env: process.env, config: loadConfig({}), name }),
   createTransport: (creds) => createGmailTransport(creds),
-  loadAllowlist: () => loadAllowlist({}),
+  loadAllowlist: (o) => loadAllowlist(o || {}),
   loadConfig: () => loadConfig({}),
   statFile: (p) => statSync(p),
   now: () => new Date().toISOString(),
-  appendLog: (entry) => appendSendLog(entry, {}),
-  readLog: (opts) => readSendLog(opts),
+  appendLog: (entry, o) => appendSendLog(entry, o || {}),
+  readLog: (o) => readSendLog(o || {}),
   fileExists: (p) => existsSync(p),
   ensureDir: (d) => mkdirSync(d, { recursive: true }),
   writeFileIfAbsent: (p, c) => {

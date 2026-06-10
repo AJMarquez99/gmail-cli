@@ -5,23 +5,30 @@ import { MissingCredentialsError } from '../lib/errors.js';
  * Never throws — returns a diagnostic envelope so callers always get a readable report.
  */
 export async function runDoctor(opts, deps) {
-  const allowlist = deps.loadAllowlist().recipients.filter((r) => r && r.email).length;
-
-  // Determine allowlist enforce status from config. Default: enforced. Guard against loadConfig throwing.
-  let allowlistEnforced = true;
+  let profile;
   try {
-    const cfg = deps.loadConfig();
-    allowlistEnforced = cfg.allowlist ? cfg.allowlist.enforce !== false : true;
-  } catch {
-    // loadConfig failure: treat as default (enforced).
+    profile = deps.resolveProfile(opts.profile);
+  } catch (err) {
+    return {
+      ok: false,
+      profile: opts.profile || '(unresolved)',
+      credentials: 'skipped',
+      smtp: 'skipped',
+      allowlist: 0,
+      allowlistEnforced: true,
+      error: err.message,
+    };
   }
+
+  const allowlist = deps.loadAllowlist({ path: profile.allowlistPath }).recipients.filter((r) => r && r.email).length;
+  const allowlistEnforced = profile.allowlistEnforce;
 
   let creds;
   try {
-    creds = deps.resolveCredentials();
+    creds = deps.resolveCredentials({ path: profile.credentialsPath });
   } catch (err) {
     if (err instanceof MissingCredentialsError) {
-      return { ok: false, credentials: 'missing', smtp: 'skipped', error: err.message, allowlist, allowlistEnforced };
+      return { ok: false, profile: profile.name, credentials: 'missing', smtp: 'skipped', error: err.message, allowlist, allowlistEnforced };
     }
     throw err;
   }
@@ -32,6 +39,7 @@ export async function runDoctor(opts, deps) {
   } catch (err) {
     return {
       ok: false,
+      profile: profile.name,
       user: creds.user,
       source: creds.source,
       credentials: 'ok',
@@ -41,5 +49,5 @@ export async function runDoctor(opts, deps) {
     };
   }
 
-  return { ok: true, user: creds.user, source: creds.source, credentials: 'ok', smtp: 'ok', allowlist, allowlistEnforced };
+  return { ok: true, profile: profile.name, user: creds.user, source: creds.source, credentials: 'ok', smtp: 'ok', allowlist, allowlistEnforced };
 }

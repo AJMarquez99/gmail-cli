@@ -1,13 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runSend } from '../src/commands/send.js';
 import { InvalidInputError } from '../src/lib/errors.js';
+import { resolveProfile } from '../src/profile.js';
 
 function deps({ stat } = {}) {
+  const config = {};
   const transporter = { sendMail: vi.fn(async () => ({ messageId: '<id>', accepted: [], rejected: [] })) };
   return {
     resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
+    resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
     loadAllowlist: () => ({ recipients: [{ email: 'x@y.com' }] }),
-    loadConfig: () => ({}),
+    loadConfig: () => config,
     createTransport: () => transporter,
     statFile: stat || vi.fn(() => ({ isFile: () => true, size: 2048 })),
     now: () => 'T', appendLog: vi.fn(), readLog: () => [],
