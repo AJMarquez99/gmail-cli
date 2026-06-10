@@ -87,6 +87,28 @@ export function formatConfig(r) {
   return lines.join('\n');
 }
 
+export function formatProfileList(r) {
+  if (r.mode === 'single-account') return 'single-account mode (no profiles configured)';
+  return r.profiles
+    .map((p) => `${p.name}${p.default ? ' (default)' : ''}`)
+    .join('\n');
+}
+
+export function formatProfileMutation(r) {
+  if (r.action === 'created') {
+    return `created profile ${r.name}${r.default ? ' (now the default)' : ''}`;
+  }
+  if (r.action === 'default-set') {
+    return `default profile is now ${r.defaultProfile}`;
+  }
+  // removed
+  const fileList = r.filesKept.join(', ');
+  const defaultNote = r.newDefault
+    ? ` · default is now ${r.newDefault}`
+    : ' · no default set';
+  return `removed profile ${r.name} — files left on disk: ${fileList}${defaultNote}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',
