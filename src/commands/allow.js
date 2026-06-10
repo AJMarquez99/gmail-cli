@@ -1,19 +1,19 @@
 import { dirname } from 'node:path';
-import { resolveAllowlistPath } from '../allowlist.js';
 import { readJson, writeJson } from '../lib/jsonfile.js';
 import { InvalidInputError } from '../lib/errors.js';
 
 // Read-only view of the recipient allowlist. Editing is done by hand in the JSON file.
 export async function runAllowList(opts, deps) {
-  const { recipients } = deps.loadAllowlist();
+  const profile = deps.resolveProfile(opts.profile);
+  const { recipients } = deps.loadAllowlist({ path: profile.allowlistPath });
   const normalized = recipients
     .filter((r) => r && r.email)
     .map((r) => ({ email: r.email, aliases: r.aliases || [] }));
   return { count: normalized.length, recipients: normalized };
 }
 
-function load(deps) {
-  const path = resolveAllowlistPath(deps.env);
+function load(deps, profileAllowlistPath) {
+  const path = profileAllowlistPath;
   const data = readJson(path, { readFile: deps.readFile });
   if (!Array.isArray(data.recipients)) data.recipients = [];
   return { path, data };
@@ -31,7 +31,8 @@ export async function runAllowAdd(opts, deps) {
     throw new InvalidInputError(`Invalid email address: ${email}`);
   }
 
-  const { path, data } = load(deps);
+  const profile = deps.resolveProfile(opts.profile);
+  const { path, data } = load(deps, profile.allowlistPath);
 
   // Check each new alias doesn't already map to a DIFFERENT email (case-insensitive).
   for (const newAlias of alias) {
@@ -86,7 +87,8 @@ export async function runAllowAdd(opts, deps) {
 export async function runAllowRemove(opts, deps) {
   const { target } = opts;
 
-  const { path, data } = load(deps);
+  const profile = deps.resolveProfile(opts.profile);
+  const { path, data } = load(deps, profile.allowlistPath);
 
   const targetLower = target.toLowerCase();
   const idx = data.recipients.findIndex((r) => {
