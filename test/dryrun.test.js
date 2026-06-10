@@ -2,13 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { runSend } from '../src/commands/send.js';
 import { formatDryRun } from '../src/lib/format.js';
+import { resolveProfile } from '../src/profile.js';
 
-function deps() {
+function deps(config = {}) {
   const transporter = { sendMail: vi.fn() };
   return {
     resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
+    resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
     loadAllowlist: () => ({ recipients: [{ email: 'x@y.com' }] }),
-    loadConfig: () => ({}),
+    loadConfig: () => config,
     createTransport: vi.fn(() => transporter),
     statFile: () => ({ isFile: () => true, size: 10 }),
     now: () => 'T', appendLog: vi.fn(), readLog: () => [],
@@ -61,19 +63,7 @@ describe('--dry-run', () => {
   });
 
   it('dry-run with config enforce false: allowlistEnforced is false, denied is empty, recipient passes through', async () => {
-    function depsWithConfig() {
-      const transporter = { sendMail: vi.fn() };
-      return {
-        resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
-        loadAllowlist: () => ({ recipients: [{ email: 'x@y.com' }] }),
-        loadConfig: () => ({ allowlist: { enforce: false } }),
-        createTransport: vi.fn(() => transporter),
-        statFile: () => ({ isFile: () => true, size: 10 }),
-        now: () => 'T', appendLog: vi.fn(), readLog: () => [],
-        _transporter: transporter,
-      };
-    }
-    const d = depsWithConfig();
+    const d = deps({ allowlist: { enforce: false } });
     const out = await runSend({ to: 'stranger@evil.com', subject: 'S', body: 'b', dryRun: true }, d);
     expect(out.allowlistEnforced).toBe(false);
     expect(out.denied).toEqual([]);

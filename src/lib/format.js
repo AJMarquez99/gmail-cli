@@ -15,6 +15,7 @@ export function formatSend(result) {
 export function formatDoctor(result) {
   const lines = [
     `status:      ${result.ok ? 'ok' : 'FAILED'}`,
+    `profile:     ${result.profile || '(default)'}`,
     `account:     ${result.user || '(none)'}`,
     `source:      ${result.source || '(none)'}`,
     `credentials: ${result.credentials}`,

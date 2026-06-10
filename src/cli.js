@@ -35,6 +35,8 @@ function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
     let root = cmd;
     while (root.parent) root = root.parent;
     const globalOpts = root.opts();
+    // Propagate global --profile into opts so every handler sees opts.profile.
+    if (opts.profile === undefined) opts.profile = globalOpts.profile;
     try {
       if (preprocess) await preprocess(opts);
       const result = await fn(opts, deps);
@@ -56,7 +58,8 @@ export function buildProgram(deps = defaultDeps) {
     .name('gmail')
     .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
     .version('0.5.0')
-    .option('--format <format>', 'output format: json|table', 'json');
+    .option('--format <format>', 'output format: json|table', 'json')
+    .option('--profile <name>', 'account profile to use');
 
   program
     .command('send')
