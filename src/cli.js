@@ -6,8 +6,9 @@ import { runAllowList, runAllowAdd, runAllowRemove } from './commands/allow.js';
 import { runLog } from './commands/log.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
+import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig } from './lib/format.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -135,6 +136,22 @@ export function buildProgram(deps = defaultDeps) {
     .description('Show recent sent-mail log entries (newest first)')
     .option('--limit <n>', 'max entries to show', '20')
     .action(handle(runLog, { table: formatLog }, deps));
+
+  const config = program
+    .command('config')
+    .description('Get/set non-secret preferences in config.json');
+  config
+    .command('set <key> <value>')
+    .description('Set a config key (dotted; true/false coerced)')
+    .action(handle(runConfigSet, { table: formatConfig, args: ['key', 'value'] }, deps));
+  config
+    .command('get [key]')
+    .description('Show a config key, or the whole config')
+    .action(handle(runConfigGet, { table: formatConfig, args: ['key'] }, deps));
+  config
+    .command('unset <key>')
+    .description('Remove a config key')
+    .action(handle(runConfigUnset, { table: formatConfig, args: ['key'] }, deps));
 
   return program;
 }

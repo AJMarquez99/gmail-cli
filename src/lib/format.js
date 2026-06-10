@@ -60,6 +60,32 @@ export function formatAllowMutation(r) {
   return `${r.action}: ${r.email}${r.aliases?.length ? ' [' + r.aliases.join(', ') + ']' : ''}`;
 }
 
+export function formatConfig(r) {
+  const lines = [];
+  if (r.action === 'unset') {
+    lines.push(`unset ${r.key}`);
+  } else if (r.key) {
+    lines.push(`${r.key} = ${JSON.stringify(r.value)}`);
+    if (r.unknownKey) {
+      lines.push(`(warning: '${r.key}' is not a recognized config key)`);
+    }
+  } else if (r.config) {
+    // Whole-config dump: key = value lines, one per leaf.
+    for (const [k, v] of Object.entries(r.config)) {
+      if (k === '_comment') continue;
+      if (v !== null && typeof v === 'object') {
+        for (const [subk, subv] of Object.entries(v)) {
+          lines.push(`${k}.${subk} = ${JSON.stringify(subv)}`);
+        }
+      } else {
+        lines.push(`${k} = ${JSON.stringify(v)}`);
+      }
+    }
+    if (lines.length === 0) lines.push('(no config set)');
+  }
+  return lines.join('\n');
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',
