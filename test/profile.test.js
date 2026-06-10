@@ -19,6 +19,18 @@ describe('resolveProfile — legacy (no profiles)', () => {
   it('legacy enforce defaults true when unset', () => {
     expect(resolveProfile({ env: ENV, config: {}, name: undefined }).allowlistEnforce).toBe(true);
   });
+  it('sets legacy: true', () => {
+    const p = resolveProfile({ env: ENV, config: {}, name: undefined });
+    expect(p.legacy).toBe(true);
+  });
+  it('honors GMAIL_CLI_CONFIG / GMAIL_ALLOWLIST / GMAIL_SEND_LOG path overrides', () => {
+    const env = { HOME: '/h', GMAIL_CLI_CONFIG: '/c.json', GMAIL_ALLOWLIST: '/a.json', GMAIL_SEND_LOG: '/s.jsonl' };
+    const p = resolveProfile({ env, config: {}, name: undefined });
+    expect(p.credentialsPath).toBe('/c.json');
+    expect(p.allowlistPath).toBe('/a.json');
+    expect(p.sendLogPath).toBe('/s.jsonl');
+    expect(p.legacy).toBe(true);
+  });
 });
 
 describe('resolveProfile — profile mode', () => {
@@ -55,6 +67,10 @@ describe('resolveProfile — profile mode', () => {
   it('throws on unknown profile name', () => {
     expect(() => resolveProfile({ env: ENV, config, name: 'ghost' })).toThrow(/ghost/);
     expect(() => resolveProfile({ env: ENV, config, name: 'ghost' })).toThrow(InvalidInputError);
+  });
+  it('sets legacy: false', () => {
+    const p = resolveProfile({ env: ENV, config, name: 'personal' });
+    expect(p.legacy).toBe(false);
   });
 });
 
