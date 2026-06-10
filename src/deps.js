@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolveCredentials } from './auth/credentials.js';
 import { createGmailTransport } from './transport.js';
 import { loadAllowlist } from './allowlist.js';
@@ -21,4 +22,26 @@ export const defaultDeps = {
   writeFileIfAbsent: (p, c) => {
     if (!existsSync(p)) writeFileSync(p, c);
   },
+  readFile: (p) => readFileSync(p, 'utf8'),
+  writeFile: (p, data, mode) => writeFileSync(p, data, mode != null ? { mode } : undefined),
+  prompt: (q) =>
+    new Promise((resolve) => {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(q, (answer) => {
+        rl.close();
+        resolve(answer);
+      });
+    }),
+  promptHidden: (q) =>
+    new Promise((resolve) => {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      rl._writeToOutput = (s) => {
+        if (s.includes(q)) process.stdout.write(s);
+      };
+      rl.question(q, (answer) => {
+        process.stdout.write('\n');
+        rl.close();
+        resolve(answer);
+      });
+    }),
 };
