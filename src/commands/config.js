@@ -12,12 +12,24 @@ const KNOWN_KEYS = new Set([
   'allowlist.enforce',
 ]);
 
+/**
+ * Compute the dotted key path to read/write in the config object.
+ * Legacy (default profile): use the bare key directly at the top level.
+ * Profile mode: prefix with profiles.<name>.
+ */
+function keyPath(profile, key) {
+  if (profile.name === '(default)') return key;
+  return `profiles.${profile.name}.${key}`;
+}
+
 export async function runConfigSet(opts, deps) {
   const { key, value } = opts;
+  const profile = deps.resolveProfile(opts.profile);
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
   const v = coerce(value);
-  const next = setPath(config, key, v);
+  const kp = keyPath(profile, key);
+  const next = setPath(config, kp, v);
   const unknownKey = !KNOWN_KEYS.has(key) || undefined;
   deps.ensureDir(dirname(path));
   writeJson(path, next, { writeFile: deps.writeFile });
@@ -26,19 +38,29 @@ export async function runConfigSet(opts, deps) {
 
 export async function runConfigGet(opts, deps) {
   const { key } = opts;
+  const profile = deps.resolveProfile(opts.profile);
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
-  if (key) {
-    return { key, value: getPath(config, key) };
+  if (profile.name === '(default)') {
+    if (key) {
+      return { key, value: getPath(config, key) };
+    }
+    return { config };
   }
-  return { config };
+  // Profile mode
+  if (key) {
+    return { key, value: getPath(config, keyPath(profile, key)) };
+  }
+  return { config: getPath(config, `profiles.${profile.name}`) ?? {} };
 }
 
 export async function runConfigUnset(opts, deps) {
   const { key } = opts;
+  const profile = deps.resolveProfile(opts.profile);
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
-  const next = unsetPath(config, key);
+  const kp = keyPath(profile, key);
+  const next = unsetPath(config, kp);
   deps.ensureDir(dirname(path));
   writeJson(path, next, { writeFile: deps.writeFile });
   return { key, action: 'unset', config: next };

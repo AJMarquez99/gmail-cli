@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runLogin } from '../src/commands/login.js';
+import { resolveProfile } from '../src/profile.js';
 import { InvalidInputError } from '../src/lib/errors.js';
 
-function deps({ exists = false, email = 'you@gmail.com', pw = 'abcd efgh ijkl mnop' } = {}) {
+function deps({ exists = false, email = 'you@gmail.com', pw = 'abcd efgh ijkl mnop', config = {} } = {}) {
   return {
     env: { HOME: '/h' },
+    resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config, name }),
     fileExists: vi.fn(() => exists),
     ensureDir: vi.fn(),
     writeFile: vi.fn(),
@@ -61,5 +63,24 @@ describe('runLogin', () => {
   it('rejects an empty app password', async () => {
     const d = deps({ pw: '   ' });
     await expect(runLogin({}, d)).rejects.toThrow(InvalidInputError);
+  });
+});
+
+describe('runLogin — profile mode', () => {
+  it('writes credentials to the profile-specific path when --profile is set', async () => {
+    const config = { profiles: { work: {} } };
+    const d = deps({ config });
+    const out = await runLogin({ profile: 'work' }, d);
+    const [writtenPath] = d.writeFile.mock.calls[0];
+    expect(writtenPath).toBe('/h/.config/gmail-cli/credentials-work.json');
+    expect(out.path).toBe('/h/.config/gmail-cli/credentials-work.json');
+  });
+
+  it('uses a custom credentialsPath from the profile config', async () => {
+    const config = { profiles: { work: { credentialsPath: '~/.config/work/creds.json' } } };
+    const d = deps({ config });
+    await runLogin({ profile: 'work' }, d);
+    const [writtenPath] = d.writeFile.mock.calls[0];
+    expect(writtenPath).toBe('/h/.config/work/creds.json');
   });
 });
