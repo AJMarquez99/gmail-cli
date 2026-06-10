@@ -331,3 +331,24 @@ describe('CLI --profile global flag', () => {
     );
   });
 });
+
+describe('runSend — credential resolution branch (legacy vs profile)', () => {
+  it('calls resolveCredentials with {} (no path) in legacy mode so env-var shortcut applies', async () => {
+    // legacy: no profiles block
+    const deps = makeDeps({ config: {} });
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b' }, deps);
+    expect(deps.resolveCredentials).toHaveBeenCalledWith({});
+  });
+
+  it('calls resolveCredentials with { path: <profileCredPath> } in profile mode', async () => {
+    const config = {
+      defaultProfile: 'work',
+      profiles: { work: { credentialsPath: '/custom/work-creds.json' } },
+    };
+    const deps = makeDeps({ config });
+    await runSend({ to: 'x@y.com', subject: 'S', body: 'b' }, deps);
+    expect(deps.resolveCredentials).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/custom/work-creds.json' }),
+    );
+  });
+});

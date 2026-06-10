@@ -51,7 +51,7 @@ export async function runConfigGet(opts, deps) {
   if (key) {
     return { key, value: getPath(config, keyPath(profile, key)) };
   }
-  return { config: getPath(config, `profiles.${profile.name}`) ?? {} };
+  return { profile: profile.name, config: getPath(config, `profiles.${profile.name}`) ?? {} };
 }
 
 export async function runConfigUnset(opts, deps) {

@@ -116,4 +116,47 @@ describe('runDoctor', () => {
     expect(out.error).toMatch(/--profile/);
     expect(deps.resolveCredentials).not.toHaveBeenCalled();
   });
+
+  it('calls resolveCredentials with {} (no path) in legacy mode', async () => {
+    const transporter = { verify: vi.fn(async () => true) };
+    const deps = makeDoctorDeps({
+      resolveCredentialsFn: vi.fn(() => ({ user: 'a@gmail.com', appPassword: 'pw', source: 'env' })),
+      createTransportFn: vi.fn(() => transporter),
+      allowlistCount: 0,
+    });
+    await runDoctor({}, deps);
+    expect(deps.resolveCredentials).toHaveBeenCalledWith({});
+  });
+
+  it('calls resolveCredentials with { path } in profile mode', async () => {
+    const transporter = { verify: vi.fn(async () => true) };
+    const cfgObj = {
+      defaultProfile: 'work',
+      profiles: { work: { credentialsPath: '/custom/work-creds.json' } },
+    };
+    const deps = makeDoctorDeps({
+      resolveCredentialsFn: vi.fn(() => ({ user: 'work@gmail.com', appPassword: 'pw', source: 'file' })),
+      createTransportFn: vi.fn(() => transporter),
+      allowlistCount: 0,
+      cfgObj,
+    });
+    await runDoctor({}, deps);
+    expect(deps.resolveCredentials).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/custom/work-creds.json' }),
+    );
+  });
+
+  it('does not throw when allowlist load raises a non-ENOENT error; reports allowlist count as 0', async () => {
+    const transporter = { verify: vi.fn(async () => true) };
+    const accessError = Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+    const deps = {
+      resolveCredentials: vi.fn(() => ({ user: 'a@gmail.com', appPassword: 'pw', source: 'env' })),
+      resolveProfile: (name) => resolveProfile({ env: { HOME: '/h' }, config: {}, name }),
+      createTransport: vi.fn(() => transporter),
+      loadAllowlist: vi.fn(() => { throw accessError; }),
+    };
+    const out = await runDoctor({}, deps);
+    expect(out.allowlist).toBe(0);
+    expect(out.ok).toBe(true);
+  });
 });

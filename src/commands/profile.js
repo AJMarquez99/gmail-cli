@@ -60,7 +60,7 @@ export async function runProfileUse(opts, deps) {
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
 
-  if (!config.profiles?.[name]) {
+  if (config.profiles?.[name] === undefined) {
     throw new InvalidInputError(`Unknown profile "${name}".`);
   }
 
@@ -80,7 +80,7 @@ export async function runProfileRemove(opts, deps) {
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
 
-  if (!config.profiles?.[name]) {
+  if (config.profiles?.[name] === undefined) {
     throw new InvalidInputError(`Unknown profile "${name}".`);
   }
 

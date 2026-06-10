@@ -1,4 +1,7 @@
 import { join } from 'node:path';
+import { resolveConfigPath } from './auth/credentials.js';
+import { resolveAllowlistPath } from './allowlist.js';
+import { resolveSendLogPath } from './lib/sendlog.js';
 import { InvalidInputError } from './lib/errors.js';
 
 const expand = (p, home) => (p && p.startsWith('~') ? join(home, p.slice(1)) : p);
@@ -11,14 +14,15 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
   if (!profiles || Object.keys(profiles).length === 0) {
     return {
       name: '(default)',
-      credentialsPath: join(dir, 'credentials.json'),
-      allowlistPath: join(dir, 'allowlist.json'),
-      sendLogPath: join(dir, 'sent.jsonl'),
+      credentialsPath: resolveConfigPath(env),
+      allowlistPath: resolveAllowlistPath(env),
+      sendLogPath: resolveSendLogPath(env),
       fromName: config.fromName || null,
       replyTo: config.replyTo || null,
       signature: config.signature || null,
       allowlistEnforce: config.allowlist ? config.allowlist.enforce !== false : true,
       sendLog: config.sendLog || {},
+      legacy: true,
     };
   }
 
@@ -44,5 +48,6 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
     signature: p.signature || null,
     allowlistEnforce: p.allowlist ? p.allowlist.enforce !== false : true,
     sendLog: p.sendLog || {},
+    legacy: false,
   };
 }

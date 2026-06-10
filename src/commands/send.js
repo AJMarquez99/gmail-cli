@@ -54,7 +54,7 @@ export async function runSend(opts, deps) {
   }
 
   const profile = deps.resolveProfile(opts.profile);
-  const creds = deps.resolveCredentials({ path: profile.credentialsPath });
+  const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
 
   // Determine whether allowlist enforcement is active. Default: ON (fail-closed).
   // Turned off by: opts.noAllowlist, opts.allowlist === false, or profile.allowlistEnforce === false.

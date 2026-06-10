@@ -20,12 +20,17 @@ export async function runDoctor(opts, deps) {
     };
   }
 
-  const allowlist = deps.loadAllowlist({ path: profile.allowlistPath }).recipients.filter((r) => r && r.email).length;
+  let allowlist = 0;
+  try {
+    allowlist = deps.loadAllowlist({ path: profile.allowlistPath }).recipients.filter((r) => r && r.email).length;
+  } catch {
+    // Non-ENOENT IO error (e.g. EACCES) — treat count as 0; doctor must never throw.
+  }
   const allowlistEnforced = profile.allowlistEnforce;
 
   let creds;
   try {
-    creds = deps.resolveCredentials({ path: profile.credentialsPath });
+    creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
   } catch (err) {
     if (err instanceof MissingCredentialsError) {
       return { ok: false, profile: profile.name, credentials: 'missing', smtp: 'skipped', error: err.message, allowlist, allowlistEnforced };

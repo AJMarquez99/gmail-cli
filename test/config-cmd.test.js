@@ -135,11 +135,11 @@ describe('runConfigGet — profile mode', () => {
     expect(out).toEqual({ key: 'fromName', value: 'W' });
   });
 
-  it('returns the whole profile object when no key', async () => {
+  it('returns the whole profile object with profile name when no key', async () => {
     const profileConfig = { profiles: { work: { fromName: 'W' } } };
     const d = deps({ file: JSON.stringify(profileConfig), config: profileConfig });
     const out = await runConfigGet({ profile: 'work' }, d);
-    expect(out).toEqual({ config: { fromName: 'W' } });
+    expect(out).toEqual({ profile: 'work', config: { fromName: 'W' } });
   });
 });
 
