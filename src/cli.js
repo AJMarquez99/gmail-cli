@@ -9,7 +9,10 @@ import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove } from './commands/profile.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark } from './lib/format.js';
+import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
+import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
+import { runMark } from './commands/mark.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -57,8 +60,8 @@ export function buildProgram(deps = defaultDeps) {
   const program = new Command();
   program
     .name('gmail')
-    .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
-    .version('0.6.0')
+    .description('Gmail CLI — send + IMAP read, with a fail-closed recipient allowlist')
+    .version('0.7.0')
     .option('--format <format>', 'output format: json|table', 'json')
     .option('--profile <name>', 'account profile to use');
 
@@ -102,7 +105,7 @@ export function buildProgram(deps = defaultDeps) {
 
   program
     .command('doctor')
-    .description('Check credentials and verify the Gmail SMTP connection')
+    .description('Check credentials and verify Gmail SMTP + IMAP')
     .action(handle(runDoctor, { table: formatDoctor }, deps));
 
   program
@@ -174,6 +177,55 @@ export function buildProgram(deps = defaultDeps) {
     .command('remove <name>')
     .description('Unregister a profile (its files are left on disk)')
     .action(handle(runProfileRemove, { table: formatProfileMutation, args: ['name'] }, deps));
+
+  const read = program.command('read').description('Read mail over IMAP');
+  read
+    .command('list')
+    .description('List recent messages')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .option('--limit <n>', 'max messages', '20')
+    .option('--unread', 'only unread messages')
+    .action(handle(runReadList, { table: formatReadList }, deps));
+  read
+    .command('search <query>')
+    .description('Search with a Gmail query (gmraw)')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .option('--limit <n>', 'max messages', '20')
+    .action(handle(runReadSearch, { table: formatReadList, args: ['query'] }, deps));
+  read
+    .command('show <target>')
+    .description('Show a message by UID or Message-ID')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .action(handle(runReadShow, { table: formatShow, args: ['target'] }, deps));
+  read
+    .command('thread <threadId>')
+    .description('Show all messages in a thread')
+    .option('--mailbox <name>', 'mailbox/label', '[Gmail]/All Mail')
+    .action(handle(runReadThread, { table: formatThread, args: ['threadId'] }, deps));
+
+  const label = program.command('label').description('Manage Gmail labels');
+  label
+    .command('list')
+    .description('List all labels/folders')
+    .action(handle(runLabelList, { table: formatLabelList }, deps));
+  label
+    .command('add <uid> <name>')
+    .description('Add a label to a message')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runLabelAdd, { table: formatLabelMutation, args: ['uid', 'name'] }, deps));
+  label
+    .command('remove <uid> <name>')
+    .description('Remove a label from a message')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runLabelRemove, { table: formatLabelMutation, args: ['uid', 'name'] }, deps));
+
+  program
+    .command('mark <uid>')
+    .description('Mark a message read or unread')
+    .option('--read', 'mark as read')
+    .option('--unread', 'mark as unread')
+    .option('--mailbox <name>', 'mailbox', 'INBOX')
+    .action(handle(runMark, { table: formatMark, args: ['uid'] }, deps));
 
   return program;
 }
