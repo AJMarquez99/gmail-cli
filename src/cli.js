@@ -60,8 +60,8 @@ export function buildProgram(deps = defaultDeps) {
   const program = new Command();
   program
     .name('gmail')
-    .description('Send-only Gmail CLI with a fail-closed recipient allowlist')
-    .version('0.6.0')
+    .description('Gmail CLI — send + IMAP read, with a fail-closed recipient allowlist')
+    .version('0.7.0')
     .option('--format <format>', 'output format: json|table', 'json')
     .option('--profile <name>', 'account profile to use');
 
@@ -105,7 +105,7 @@ export function buildProgram(deps = defaultDeps) {
 
   program
     .command('doctor')
-    .description('Check credentials and verify the Gmail SMTP connection')
+    .description('Check credentials and verify Gmail SMTP + IMAP')
     .action(handle(runDoctor, { table: formatDoctor }, deps));
 
   program
@@ -196,7 +196,6 @@ export function buildProgram(deps = defaultDeps) {
     .command('show <target>')
     .description('Show a message by UID or Message-ID')
     .option('--mailbox <name>', 'mailbox/label', 'INBOX')
-    .option('--html', 'include HTML body in output')
     .action(handle(runReadShow, { table: formatShow, args: ['target'] }, deps));
   read
     .command('thread <threadId>')

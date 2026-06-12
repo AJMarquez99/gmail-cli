@@ -52,7 +52,11 @@ export async function runDoctor(opts, deps) {
   try {
     const c = deps.createImapClient(creds, profile.imap || {});
     await c.connect();
-    await c.logout();
+    try {
+      // Connected successfully; nothing else to probe here.
+    } finally {
+      await c.logout();
+    }
     imap = 'ok';
   } catch (e) {
     imap = e.message || String(e);

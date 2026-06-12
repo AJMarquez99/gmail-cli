@@ -153,7 +153,7 @@ export function formatShow(r) {
   if (m.text) {
     lines.push(m.text);
   } else if (m.html) {
-    lines.push('(HTML body — rerun without --html flag or use --format json to extract)');
+    lines.push('(HTML body — use --format json to extract the html field)');
   } else {
     lines.push('(no body)');
   }

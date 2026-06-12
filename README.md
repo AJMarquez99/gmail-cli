@@ -4,11 +4,12 @@
 [![CI](https://github.com/AJMarquez99/gmail-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/AJMarquez99/gmail-cli/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A send-only Gmail CLI with a fail-closed recipient allowlist.
+A Gmail CLI with a fail-closed recipient allowlist.
 
-Sends over Gmail SMTP using an **App Password** — no OAuth, no service accounts. Pairs well with
-a read-only setup (e.g. the [claude.ai Gmail connector](https://claude.ai)) for a full
-compose-and-send agent loop, but works perfectly standalone; you don't need anything else to send.
+Sends over Gmail SMTP and reads over Gmail IMAP, both using an **App Password** — no OAuth, no
+service accounts. `gmail read show` surfaces the Message-ID of any message, which you can pass
+directly to `gmail send --in-reply-to` for a full read-and-reply loop from the terminal or an
+agent — no external connector needed.
 
 ## Install
 
@@ -67,11 +68,12 @@ JSON files still works if you prefer).
    gmail config set fromName "Your Name"
    ```
 
-4. **Verify and send**:
+4. **Verify and send** (doctor now checks both SMTP and IMAP):
 
    ```bash
    gmail doctor
    gmail send --to alice --subject "Hello" --body "Hi there."
+   gmail read list        # list inbox once IMAP is enabled on the account
    ```
 
 > **Getting an App Password:** requires 2FA on the account.
@@ -80,6 +82,100 @@ JSON files still works if you prefer).
 
 **Multiple accounts (optional):** see [Profiles](#profiles) to manage more than one Gmail account
 from the same CLI. The single-account setup above keeps working unchanged — profiles are opt-in.
+
+## Reading mail (IMAP)
+
+### Prerequisite
+
+IMAP must be enabled on each Gmail account before any `read`, `label`, or `mark` command will
+work. In Gmail, go to **Settings → See all settings → Forwarding and POP/IMAP → Enable IMAP**.
+The same App Password you set up for sending works for IMAP too — no second credential needed.
+`gmail doctor` checks both the SMTP and IMAP connections and reports the result for each.
+
+### Commands
+
+```bash
+# List the 20 most-recent messages in INBOX (newest first)
+gmail read list
+
+# Limit to 10, or only unread messages
+gmail read list --limit 10
+gmail read list --unread
+
+# List from a different mailbox/label
+gmail read list --mailbox "[Gmail]/Sent Mail"
+
+# Search with Gmail's query syntax — same queries as the Gmail search box
+gmail read search "from:alice@example.com has:attachment"
+gmail read search "newer_than:7d is:unread" --limit 50
+gmail read search "subject:invoice" --mailbox "[Gmail]/All Mail"
+
+# Show a full message by UID (from `read list` output) or by Message-ID.
+# Table output prints the plain-text body; the HTML body (when present) is always
+# available via --format json (the `html` field).
+gmail read show 1234
+gmail read show "<abc123@mail.gmail.com>"
+gmail read show 1234 --format json
+
+# Show all messages in a thread (oldest first; defaults to [Gmail]/All Mail)
+gmail read thread <thread-id>
+gmail read thread <thread-id> --mailbox INBOX
+
+# List all labels/folders on the account
+gmail label list
+
+# Add or remove a label on a message (identified by UID)
+gmail label add 1234 Work
+gmail label remove 1234 Work
+# label add/remove default to INBOX; override with --mailbox if the message is elsewhere
+gmail label add 1234 Archived --mailbox "[Gmail]/All Mail"
+
+# Mark a message as read or unread
+gmail mark 1234 --read
+gmail mark 1234 --unread
+# Override the mailbox if the message is not in INBOX
+gmail mark 1234 --read --mailbox "[Gmail]/Sent Mail"
+```
+
+### Read-and-reply loop
+
+`read show` returns the `messageId` field (the RFC 822 Message-ID), which you can feed straight
+into `gmail send --in-reply-to` to thread a reply:
+
+```bash
+# Get the Message-ID of the message you want to reply to
+gmail read show 1234 --format json | grep messageId
+
+# Thread a reply
+gmail send --to sender@example.com \
+  --subject "Re: Original subject" \
+  --body "Got it, thanks." \
+  --in-reply-to "<abc123@mail.gmail.com>"
+```
+
+### Privacy note
+
+Read content is displayed in the terminal but is **never written to the send log** — the log
+remains send-only. HTML bodies are fetched but kept in memory only; nothing is persisted to disk.
+
+### Profile awareness
+
+All read commands (`read`, `label`, `mark`) are profile-aware: use `--profile <name>` or set
+`GMAIL_PROFILE` to select an account. Per-profile IMAP host/port overrides can be set in
+`config.json` under `profiles.<name>.imap`:
+
+```json
+{
+  "profiles": {
+    "work": {
+      "imap": {
+        "host": "imap.example.com",
+        "port": 993
+      }
+    }
+  }
+}
+```
 
 ## Profiles
 
@@ -271,7 +367,15 @@ gmail sent --limit 5
 | `gmail init` | Scaffold `~/.config/gmail-cli/` (allowlist.json + config.json) and print setup steps. |
 | `gmail login` | Guided credential setup — prompts for email and App Password (hidden), writes credentials.json at chmod 600. |
 | `gmail send` | Send an email (text/HTML/Markdown, to/cc/bcc, attachments, threading, dry-run). Enforces the allowlist. |
-| `gmail doctor` | Check credentials, verify Gmail SMTP, report allowlist size. |
+| `gmail doctor` | Check credentials, verify Gmail SMTP and IMAP connections, report allowlist size. |
+| `gmail read list` | List recent messages (newest first). Options: `--mailbox`, `--limit`, `--unread`. |
+| `gmail read search <query>` | Search with a Gmail query string (same syntax as the Gmail search box). Options: `--mailbox`, `--limit`. |
+| `gmail read show <uid\|message-id>` | Show a full message by UID or Message-ID. Options: `--mailbox`. (HTML body is in the `html` field of `--format json` output.) |
+| `gmail read thread <thread-id>` | Show all messages in a thread (oldest first). Options: `--mailbox`. |
+| `gmail label list` | List all labels/folders on the account. |
+| `gmail label add <uid> <name>` | Add a label to a message by UID. Options: `--mailbox`. |
+| `gmail label remove <uid> <name>` | Remove a label from a message by UID. Options: `--mailbox`. |
+| `gmail mark <uid> --read\|--unread` | Mark a message as read or unread. Options: `--mailbox`. Exactly one of `--read` or `--unread` is required. |
 | `gmail allow list` | List allowed recipients and their aliases (read-only). |
 | `gmail allow add <email>` | Add a recipient to the allowlist (idempotent; merges aliases if entry already exists). |
 | `gmail allow remove <email\|alias>` | Remove a recipient by email address or alias. |
