@@ -109,6 +109,76 @@ export function formatProfileMutation(r) {
   return `removed profile ${r.name} — files left on disk: ${fileList}${defaultNote}`;
 }
 
+// ---------------------------------------------------------------------------
+// Read formatters
+// ---------------------------------------------------------------------------
+
+/**
+ * Format a list of messages (used by `read list` and `read search`).
+ */
+export function formatReadList(r) {
+  if (!r.messages || r.messages.length === 0) return '(no messages)';
+  return r.messages
+    .map((m) => {
+      const date = m.date ? new Date(m.date).toLocaleDateString() : '(no date)';
+      const from = (m.from && m.from[0]) || '';
+      const unread = m.flags && m.flags.includes('\\Seen') ? '' : '  •unread';
+      return `${m.uid}  ${date}  ${from}  ${m.subject}${unread}`;
+    })
+    .join('\n');
+}
+
+/**
+ * Format a single message (used by `read show`).
+ */
+export function formatShow(r) {
+  const m = r.message;
+  const lines = [
+    `from:    ${(m.from || []).join(', ') || '(none)'}`,
+    `to:      ${(m.to || []).join(', ') || '(none)'}`,
+    `subject: ${m.subject || '(none)'}`,
+    `date:    ${m.date || '(none)'}`,
+    `labels:  ${(m.labels || []).join(', ') || '(none)'}`,
+    '',
+  ];
+
+  if (m.text) {
+    lines.push(m.text);
+  } else if (m.html) {
+    lines.push('(HTML body — rerun without --html flag or use --format json to extract)');
+  } else {
+    lines.push('(no body)');
+  }
+
+  if (m.attachments && m.attachments.length > 0) {
+    lines.push('');
+    lines.push('attachments:');
+    for (const a of m.attachments) {
+      const size = a.size != null ? ` (${a.size}b)` : '';
+      lines.push(`  ${a.filename || '(unnamed)'}${size}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Format a thread (used by `read thread`).
+ */
+export function formatThread(r) {
+  if (!r.messages || r.messages.length === 0) return '(no messages in thread)';
+  const count = r.messages.length;
+  const header = `${count} message${count === 1 ? '' : 's'} in thread`;
+  const body = r.messages
+    .map((m) => {
+      const date = m.date ? new Date(m.date).toLocaleDateString() : '(no date)';
+      const from = (m.from && m.from[0]) || '(unknown)';
+      return `  ${date} · ${from} · ${m.subject}`;
+    })
+    .join('\n');
+  return `${header}\n${body}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',

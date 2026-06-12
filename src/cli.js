@@ -9,7 +9,8 @@ import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove } from './commands/profile.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatReadList, formatShow, formatThread } from './lib/format.js';
+import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -174,6 +175,32 @@ export function buildProgram(deps = defaultDeps) {
     .command('remove <name>')
     .description('Unregister a profile (its files are left on disk)')
     .action(handle(runProfileRemove, { table: formatProfileMutation, args: ['name'] }, deps));
+
+  const read = program.command('read').description('Read mail over IMAP');
+  read
+    .command('list')
+    .description('List recent messages')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .option('--limit <n>', 'max messages', '20')
+    .option('--unread', 'only unread messages')
+    .action(handle(runReadList, { table: formatReadList }, deps));
+  read
+    .command('search <query>')
+    .description('Search with a Gmail query (gmraw)')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .option('--limit <n>', 'max messages', '20')
+    .action(handle(runReadSearch, { table: formatReadList, args: ['query'] }, deps));
+  read
+    .command('show <target>')
+    .description('Show a message by UID or Message-ID')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .option('--html', 'include HTML body in output')
+    .action(handle(runReadShow, { table: formatShow, args: ['target'] }, deps));
+  read
+    .command('thread <threadId>')
+    .description('Show all messages in a thread')
+    .option('--mailbox <name>', 'mailbox/label', '[Gmail]/All Mail')
+    .action(handle(runReadThread, { table: formatThread, args: ['threadId'] }, deps));
 
   return program;
 }
