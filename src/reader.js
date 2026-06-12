@@ -189,6 +189,23 @@ export async function removeLabel(client, { uid, label, mailbox = 'INBOX' } = {}
 }
 
 /**
+ * Mark a message as read or unread by toggling the \Seen IMAP flag.
+ *
+ * @param {object} client   Connected imapflow client.
+ * @param {object} [opts]
+ * @param {number|string} [opts.uid]      Message UID.
+ * @param {boolean} [opts.seen]           true → mark read, false → mark unread.
+ * @param {string} [opts.mailbox='INBOX']
+ * @returns {Promise<{uid:number, seen:boolean, action:'read'|'unread'}>}
+ */
+export async function markMessage(client, { uid, seen, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  if (seen) await client.messageFlagsAdd(Number(uid), ['\\Seen'], { uid: true });
+  else await client.messageFlagsRemove(Number(uid), ['\\Seen'], { uid: true });
+  return { uid: Number(uid), seen, action: seen ? 'read' : 'unread' };
+}
+
+/**
  * List all IMAP mailboxes / Gmail labels.
  *
  * @param {object} client

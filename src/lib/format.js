@@ -20,10 +20,18 @@ export function formatDoctor(result) {
     `source:      ${result.source || '(none)'}`,
     `credentials: ${result.credentials}`,
     `smtp:        ${result.smtp}`,
+    `imap:        ${result.imap}`,
     `allowlist:   ${result.allowlist} recipient(s) — ${result.allowlistEnforced ? 'enforced' : 'DISABLED'}`,
   ];
   if (result.error) lines.push('', result.error);
   return lines.join('\n');
+}
+
+/**
+ * Format the result of a `mark` mutation.
+ */
+export function formatMark(r) {
+  return `marked message ${r.uid} as ${r.action}`;
 }
 
 export function formatAllowList(result) {

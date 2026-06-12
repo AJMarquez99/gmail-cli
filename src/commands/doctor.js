@@ -1,7 +1,7 @@
 import { MissingCredentialsError } from '../lib/errors.js';
 
 /**
- * Health check: are credentials present, and does Gmail accept them over SMTP?
+ * Health check: are credentials present, and does Gmail accept them over SMTP and IMAP?
  * Never throws — returns a diagnostic envelope so callers always get a readable report.
  */
 export async function runDoctor(opts, deps) {
@@ -14,6 +14,7 @@ export async function runDoctor(opts, deps) {
       profile: opts.profile || '(unresolved)',
       credentials: 'skipped',
       smtp: 'skipped',
+      imap: 'skipped',
       allowlist: 0,
       allowlistEnforced: true,
       error: err.message,
@@ -32,27 +33,44 @@ export async function runDoctor(opts, deps) {
   try {
     creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
   } catch (err) {
-    if (err instanceof MissingCredentialsError) {
-      return { ok: false, profile: profile.name, credentials: 'missing', smtp: 'skipped', error: err.message, allowlist, allowlistEnforced };
-    }
-    throw err;
+    const credentials = err instanceof MissingCredentialsError ? 'missing' : 'error';
+    return { ok: false, profile: profile.name, credentials, smtp: 'skipped', imap: 'skipped', error: err.message, allowlist, allowlistEnforced };
   }
 
-  const transporter = deps.createTransport(creds);
+  let smtpOk = false;
+  let smtp;
   try {
+    const transporter = deps.createTransport(creds);
     await transporter.verify();
+    smtpOk = true;
+    smtp = 'ok';
   } catch (err) {
+    smtp = err.message || String(err);
+  }
+
+  let imap;
+  try {
+    const c = deps.createImapClient(creds, profile.imap || {});
+    await c.connect();
+    await c.logout();
+    imap = 'ok';
+  } catch (e) {
+    imap = e.message || String(e);
+  }
+
+  if (!smtpOk) {
     return {
       ok: false,
       profile: profile.name,
       user: creds.user,
       source: creds.source,
       credentials: 'ok',
-      smtp: err.message || String(err),
+      smtp,
+      imap,
       allowlist,
       allowlistEnforced,
     };
   }
 
-  return { ok: true, profile: profile.name, user: creds.user, source: creds.source, credentials: 'ok', smtp: 'ok', allowlist, allowlistEnforced };
+  return { ok: smtpOk && imap === 'ok', profile: profile.name, user: creds.user, source: creds.source, credentials: 'ok', smtp, imap, allowlist, allowlistEnforced };
 }
