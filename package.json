@@ -3,19 +3,49 @@
   "version": "0.6.0",
   "description": "Send-only Gmail CLI with a fail-closed recipient allowlist — markdown, attachments, dry-run, threading, and a send log.",
   "type": "module",
-  "bin": { "gmail": "./bin/gmail.js" },
-  "files": ["bin/", "src/", "README.md", "LICENSE"],
-  "engines": { "node": ">=20" },
+  "bin": {
+    "gmail": "./bin/gmail.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "license": "MIT",
   "author": "Alejandro Marquez",
-  "repository": { "type": "git", "url": "https://github.com/AJMarquez99/gmail-cli.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AJMarquez99/gmail-cli.git"
+  },
   "homepage": "https://github.com/AJMarquez99/gmail-cli#readme",
-  "bugs": { "url": "https://github.com/AJMarquez99/gmail-cli/issues" },
-  "keywords": ["gmail", "email", "cli", "smtp", "nodemailer", "send", "allowlist", "agentic"],
-  "publishConfig": { "access": "public" },
-  "scripts": { "test": "vitest", "test:run": "vitest run" },
+  "bugs": {
+    "url": "https://github.com/AJMarquez99/gmail-cli/issues"
+  },
+  "keywords": [
+    "gmail",
+    "email",
+    "cli",
+    "smtp",
+    "nodemailer",
+    "send",
+    "allowlist",
+    "agentic"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
   "dependencies": {
     "commander": "^12.1.0",
+    "imapflow": "^1.4.0",
+    "mailparser": "^3.9.9",
     "marked": "^18.0.5",
     "nodemailer": "^8.0.10"
   },

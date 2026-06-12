@@ -1,7 +1,9 @@
 import { createInterface } from 'node:readline';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { simpleParser } from 'mailparser';
 import { resolveCredentials } from './auth/credentials.js';
 import { createGmailTransport } from './transport.js';
+import { createImapClient } from './imap.js';
 import { loadAllowlist } from './allowlist.js';
 import { loadConfig } from './config.js';
 import { appendSendLog, readSendLog } from './lib/sendlog.js';
@@ -13,6 +15,8 @@ export const defaultDeps = {
   resolveCredentials: (o) => resolveCredentials(o || {}),
   resolveProfile: (name) => resolveProfile({ env: process.env, config: loadConfig({}), name }),
   createTransport: (creds) => createGmailTransport(creds),
+  createImapClient: (creds, imapOpts) => createImapClient(creds, imapOpts),
+  parseMessage: (source) => simpleParser(source),
   loadAllowlist: (o) => loadAllowlist(o || {}),
   loadConfig: () => loadConfig({}),
   statFile: (p) => statSync(p),
