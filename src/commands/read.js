@@ -4,7 +4,7 @@ import * as reader from '../reader.js';
  * Opens an IMAP client, runs the given operation, and ALWAYS logs out —
  * even when the operation throws.
  */
-async function withClient(opts, deps, fn) {
+export async function withClient(opts, deps, fn) {
   const profile = deps.resolveProfile(opts.profile);
   const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
   const client = deps.createImapClient(creds, profile.imap || {});

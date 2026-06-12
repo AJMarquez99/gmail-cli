@@ -9,8 +9,9 @@ import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove } from './commands/profile.js';
 import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatReadList, formatShow, formatThread } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
+import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -201,6 +202,22 @@ export function buildProgram(deps = defaultDeps) {
     .description('Show all messages in a thread')
     .option('--mailbox <name>', 'mailbox/label', '[Gmail]/All Mail')
     .action(handle(runReadThread, { table: formatThread, args: ['threadId'] }, deps));
+
+  const label = program.command('label').description('Manage Gmail labels');
+  label
+    .command('list')
+    .description('List all labels/folders')
+    .action(handle(runLabelList, { table: formatLabelList }, deps));
+  label
+    .command('add <uid> <name>')
+    .description('Add a label to a message')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runLabelAdd, { table: formatLabelMutation, args: ['uid', 'name'] }, deps));
+  label
+    .command('remove <uid> <name>')
+    .description('Remove a label from a message')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runLabelRemove, { table: formatLabelMutation, args: ['uid', 'name'] }, deps));
 
   return program;
 }

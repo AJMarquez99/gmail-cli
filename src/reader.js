@@ -157,6 +157,38 @@ export async function getThread(client, { threadId, mailbox = '[Gmail]/All Mail'
 }
 
 /**
+ * Add a Gmail label to a message via X-GM-LABELS.
+ *
+ * @param {object} client   Connected imapflow client.
+ * @param {object} [opts]
+ * @param {number|string} [opts.uid]      Message UID.
+ * @param {string} [opts.label]           Label/mailbox path to add.
+ * @param {string} [opts.mailbox='INBOX']
+ * @returns {Promise<{uid:number, label:string, action:'added'}>}
+ */
+export async function addLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  await client.messageFlagsAdd(Number(uid), [label], { uid: true, useLabels: true });
+  return { uid: Number(uid), label, action: 'added' };
+}
+
+/**
+ * Remove a Gmail label from a message via X-GM-LABELS.
+ *
+ * @param {object} client   Connected imapflow client.
+ * @param {object} [opts]
+ * @param {number|string} [opts.uid]      Message UID.
+ * @param {string} [opts.label]           Label/mailbox path to remove.
+ * @param {string} [opts.mailbox='INBOX']
+ * @returns {Promise<{uid:number, label:string, action:'removed'}>}
+ */
+export async function removeLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  await client.messageFlagsRemove(Number(uid), [label], { uid: true, useLabels: true });
+  return { uid: Number(uid), label, action: 'removed' };
+}
+
+/**
  * List all IMAP mailboxes / Gmail labels.
  *
  * @param {object} client

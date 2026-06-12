@@ -179,6 +179,26 @@ export function formatThread(r) {
   return `${header}\n${body}`;
 }
 
+// ---------------------------------------------------------------------------
+// Label formatters
+// ---------------------------------------------------------------------------
+
+/**
+ * Format a list of labels (used by `label list`).
+ */
+export function formatLabelList(r) {
+  if (!r.labels || r.labels.length === 0) return '(no labels)';
+  return r.labels.map((l) => l.path).join('\n');
+}
+
+/**
+ * Format the result of a label add/remove mutation.
+ */
+export function formatLabelMutation(r) {
+  const direction = r.action === 'added' ? 'to' : 'from';
+  return `${r.action} label "${r.label}" ${direction} message ${r.uid}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',
