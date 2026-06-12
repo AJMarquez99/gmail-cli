@@ -39,6 +39,26 @@ npm install -g .
 
 > **Requires Node.js ≥ 20.**
 
+### `gmail: command not found` after install?
+
+A global npm install drops the `gmail` executable into npm's global bin directory — it does **not**
+edit your shell config. If that directory isn't on your `PATH`, the command won't be found. Print
+the directory and confirm it's on your `PATH`:
+
+```bash
+npm prefix -g          # global install root; the bin dir is <that>/bin
+echo "$PATH" | tr ':' '\n' | grep "$(npm prefix -g)/bin" || echo "not on PATH"
+```
+
+If it's missing, add it to your shell config (`~/.zshrc`, `~/.bashrc`, etc.) and restart your shell:
+
+```bash
+export PATH="$(npm prefix -g)/bin:$PATH"
+```
+
+Most Node setups (official installer, Homebrew, nvm, fnm, volta) already put this directory on
+`PATH`, so this is only needed for non-standard installs.
+
 ## Quickstart
 
 All setup steps are now command-driven — no hand-editing JSON required (though hand-editing the
