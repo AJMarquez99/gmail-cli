@@ -12,7 +12,13 @@ sent.jsonl
 # npm pack artifact
 *.tgz
 
-# Agent project directory + local agent instructions — kept local for now
-# (not committed to this repo).
-.ai/
+# Agent project directory (.ai/) — committed as public project intelligence,
+# governed by .ai/.gitignore (the `_*` local-only rule). Two exceptions kept local:
+#   - context/ contents are regenerable session state (ignored via .ai/context/.gitignore)
+#   - plans/ hold implementation history with personal account details — keep local,
+#     but track the folder + its README so the convention stays legible.
+.ai/plans/*
+!.ai/plans/README.md
+
+# Local agent instructions (dot-ai convention block) — kept local, not committed.
 /CLAUDE.md
