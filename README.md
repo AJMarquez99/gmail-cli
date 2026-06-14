@@ -593,6 +593,14 @@ exposes **no** `no_allowlist` (bypass) or `no_log` (accountability) argument. Wi
 or disabling enforcement remains a deliberate human edit to the config files. See the umbrella
 `.ai/guidelines/safety-spec.md` §5.8 for the full rationale.
 
+## Related tools
+
+gmail-cli is one of a small family of personal, fail-closed CLIs built for AI coding agents — each a
+focused wrapper around a single service, in the spirit of [`gh`](https://cli.github.com):
+
+- **[dot-ai](https://github.com/AJMarquez99/dot-ai)** — the agent-agnostic `.ai/` project-intelligence
+  convention these tools are documented with.
+
 ## Develop
 
 ```bash
