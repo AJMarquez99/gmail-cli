@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readJson, writeJson, getPath, setPath, unsetPath, coerce } from '../src/lib/jsonfile.js';
-import { InvalidInputError } from '../src/lib/errors.js';
+import { MalformedConfigError } from '../src/lib/errors.js';
 
 describe('readJson', () => {
   it('parses an existing file', () => {
@@ -11,10 +11,20 @@ describe('readJson', () => {
     const readFile = vi.fn(() => { const e = new Error('no'); e.code = 'ENOENT'; throw e; });
     expect(readJson('/p.json', { readFile })).toEqual({});
   });
-  it('throws InvalidInputError on malformed JSON (message names the file)', () => {
+  it('returns {} for an empty / whitespace-only file', () => {
+    expect(readJson('/p.json', { readFile: vi.fn(() => '') })).toEqual({});
+    expect(readJson('/p.json', { readFile: vi.fn(() => '   \n') })).toEqual({});
+  });
+  it('uses onMissing() for both absent and empty files', () => {
+    const onMissing = vi.fn(() => ({ recipients: [] }));
+    const enoent = vi.fn(() => { const e = new Error('no'); e.code = 'ENOENT'; throw e; });
+    expect(readJson('/p.json', { readFile: enoent, onMissing })).toEqual({ recipients: [] });
+    expect(readJson('/p.json', { readFile: vi.fn(() => ''), onMissing })).toEqual({ recipients: [] });
+  });
+  it('throws MalformedConfigError on malformed JSON (message names the file)', () => {
     const readFile = vi.fn(() => '{ bad');
     expect(() => readJson('/path/p.json', { readFile })).toThrow(/p\.json/);
-    expect(() => readJson('/path/p.json', { readFile })).toThrow(InvalidInputError);
+    expect(() => readJson('/path/p.json', { readFile })).toThrow(MalformedConfigError);
   });
 });
 

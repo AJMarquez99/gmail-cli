@@ -1,4 +1,4 @@
-import { MissingCredentialsError } from '../lib/errors.js';
+import { MissingCredentialsError, MalformedConfigError } from '../lib/errors.js';
 
 /**
  * Health check: are credentials present, and does Gmail accept them over SMTP and IMAP?
@@ -33,7 +33,11 @@ export async function runDoctor(opts, deps) {
   try {
     creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
   } catch (err) {
-    const credentials = err instanceof MissingCredentialsError ? 'missing' : 'error';
+    const credentials = err instanceof MissingCredentialsError
+      ? 'missing'
+      : err instanceof MalformedConfigError
+        ? 'malformed'
+        : 'error';
     return { ok: false, profile: profile.name, credentials, smtp: 'skipped', imap: 'skipped', error: err.message, allowlist, allowlistEnforced };
   }
 

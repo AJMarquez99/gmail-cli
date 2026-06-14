@@ -1,24 +1,30 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { InvalidInputError } from './errors.js';
+import { MalformedConfigError } from './errors.js';
 
 /**
- * Read and parse a JSON file. Returns {} on ENOENT; throws InvalidInputError on parse failure.
+ * Read and parse a JSON file — the single JSON-parsing choke point for all config-style files
+ * (config.json, allowlist.json, credentials.json). A missing OR empty file yields the
+ * `onMissing()` result (default `{}`); a present-but-unparseable file throws MalformedConfigError
+ * (exit 2) rather than leaking a raw SyntaxError (which would surface at exit 1). Non-ENOENT read
+ * errors (e.g. EACCES) propagate unchanged.
  * @param {string} path
- * @param {{ readFile?: Function }} [opts]
- * @returns {object}
+ * @param {{ readFile?: Function, onMissing?: () => any }} [opts]
+ * @returns {any}
  */
-export function readJson(path, { readFile = readFileSync } = {}) {
+export function readJson(path, { readFile = readFileSync, onMissing } = {}) {
+  const missing = () => (onMissing ? onMissing() : {});
   let raw;
   try {
     raw = readFile(path, 'utf8');
   } catch (err) {
-    if (err.code === 'ENOENT') return {};
+    if (err.code === 'ENOENT') return missing();
     throw err;
   }
+  if (!raw.trim()) return missing(); // empty/whitespace file → treat as missing
   try {
     return JSON.parse(raw);
   } catch (err) {
-    throw new InvalidInputError(`Malformed JSON at ${path}: ${err.message}`);
+    throw new MalformedConfigError(path, err.message);
   }
 }
 

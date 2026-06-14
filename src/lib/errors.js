@@ -1,4 +1,4 @@
-// Exit codes mirror the gsc-cli convention: 2 = user-fixable config, 1 = everything else.
+// Exit-code scheme: 2 = user-fixable config, 3 = recipient blocked by the allowlist, 1 = everything else.
 export const EXIT_CODES = {
   GENERIC: 1, // unexpected / SMTP / network failure
   CONFIG: 2, // user-fixable config (missing credentials, bad input)
@@ -28,6 +28,18 @@ export class MissingCredentialsError extends GmailError {
 export class InvalidInputError extends GmailError {
   constructor(message) {
     super(message, EXIT_CODES.CONFIG);
+  }
+}
+
+export class MalformedConfigError extends GmailError {
+  constructor(path, detail) {
+    super(
+      `Config file is not valid JSON: ${path}` +
+        (detail ? `\n  ${detail}` : '') +
+        `\nFix the file (or delete it to start fresh) and retry.`,
+      EXIT_CODES.CONFIG,
+    );
+    this.path = path;
   }
 }
 

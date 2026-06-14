@@ -45,7 +45,7 @@ function isNumericUid(target) {
  * @param {object} [deps]               Dependency injection (unused at this layer, reserved for future use).
  * @returns {Promise<object[]>} Normalized messages, newest-first.
  */
-export async function listMessages(client, { mailbox = 'INBOX', limit = 20, unread = false } = {}, deps = {}) {
+export async function listMessages(client, { mailbox = 'INBOX', limit = 20, unread = false } = {}, _deps = {}) {
   await client.mailboxOpen(mailbox);
 
   const criteria = unread ? { seen: false } : { all: true };
@@ -73,7 +73,7 @@ export async function listMessages(client, { mailbox = 'INBOX', limit = 20, unre
  * @param {object} [deps]
  * @returns {Promise<object[]>} Normalized messages, newest-first.
  */
-export async function searchMessages(client, { query, mailbox = 'INBOX', limit = 20 } = {}, deps = {}) {
+export async function searchMessages(client, { query, mailbox = 'INBOX', limit = 20 } = {}, _deps = {}) {
   await client.mailboxOpen(mailbox);
 
   const allUids = await client.search({ gmraw: query }, { uid: true });
@@ -139,7 +139,7 @@ export async function showMessage(client, { target, mailbox = 'INBOX' } = {}, de
  * @param {object} [deps]
  * @returns {Promise<object[]>} Normalized messages, date-ascending (oldest first).
  */
-export async function getThread(client, { threadId, mailbox = '[Gmail]/All Mail' } = {}, deps = {}) {
+export async function getThread(client, { threadId, mailbox = '[Gmail]/All Mail' } = {}, _deps = {}) {
   await client.mailboxOpen(mailbox);
 
   const uids = await client.search({ gmraw: `threadid:${threadId}` }, { uid: true });
