@@ -22,9 +22,9 @@ prerequisite, then re-push the tag.
    ```
 2. Bump the version in **both** `package.json` and `package-lock.json` (use `npm version <patch|minor|major>`,
    which updates both and creates the commit + tag), or edit + `npm install` to sync the lockfile.
-   Keep `--version` in `src/cli.js` (`buildProgram`) in step too — it's hard-coded there.
-   - **Stop and check:** `package.json`, `package-lock.json` (both `version` fields), and the
-     `.version('x.y.z')` call in `src/cli.js` must all match. A mismatch ships a wrong `--version`.
+   - The CLI's `--version` reads from `package.json` at runtime (`src/version.js` → `.version(VERSION)`
+     in `buildProgram`), so there is **no** hard-coded version in the source to keep in sync — bumping
+     `package.json` is enough. The `smoke.test.js` `VERSION === pkg.version` check guards this.
 3. Push the commit and the tag:
    ```bash
    git push origin main

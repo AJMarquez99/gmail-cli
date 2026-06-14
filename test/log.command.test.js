@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { runLog } from '../src/commands/log.js';
 import { resolveProfile } from '../src/profile.js';
 

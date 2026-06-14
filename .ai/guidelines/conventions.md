@@ -25,10 +25,15 @@ Throw the right error class from `src/lib/errors.js` so the exit code is correct
 
 | Situation | Throw | Exit |
 |---|---|---|
-| user-fixable config / bad input | `InvalidInputError` (or `MissingCredentialsError`) | `2` |
+| bad flag / arg / input | `InvalidInputError` (or `MissingCredentialsError`) | `2` |
+| unparseable config/allowlist/credentials **file** | `MalformedConfigError` | `2` |
 | recipient not on the allowlist | `RecipientNotAllowedError` | `3` |
 | network / SMTP / unexpected | `GmailError` or any plain `Error` | `1` |
 | success | return data normally | `0` |
+
+All JSON config files are parsed through `lib/jsonfile.js#readJson`, which throws
+`MalformedConfigError` on bad JSON — don't hand-roll `JSON.parse` in a loader (that leaks a raw
+`SyntaxError` at exit 1).
 
 `handle()` maps any non-`GmailError` to exit `1`, so reserve plain `throw new Error()` for genuinely
 unexpected failures.

@@ -182,7 +182,6 @@ describe('runProfileRemove', () => {
     // other than readFile, writeFile, ensureDir
     await runProfileRemove({ name: 'home' }, d);
     // Only read + write should have been called; no "delete" call
-    const mockKeys = Object.keys(d).filter((k) => typeof d[k]?.mock !== 'undefined');
     const writeCalls = d.writeFile.mock.calls.length;
     expect(writeCalls).toBe(1); // exactly one write (the updated config)
   });
