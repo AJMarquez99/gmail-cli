@@ -543,6 +543,56 @@ gmail log --limit 5 # show last 5
 - Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast
   radius of a misused App Password is limited to addresses you've explicitly approved.
 
+## MCP server
+
+gmail-cli ships a stdio Model Context Protocol server — the portable counterpart to the CLI, so
+MCP-aware clients (Claude Code, Claude Desktop) can drive Gmail as structured tools without shell
+invocations.
+
+### Install
+
+`npm install -g .` installs **both** the `gmail` CLI and the `gmail-mcp` MCP server binary.
+
+### Register with Claude Code
+
+```bash
+claude mcp add gmail -- gmail-mcp
+```
+
+The server reads the same `~/.config/gmail-cli/` credentials, config, and allowlist files as the
+CLI (including profiles via the optional `profile` argument). No extra setup needed.
+
+### Tools
+
+The MCP surface is the **operational verbs only** — `send`, mailbox reads, label/mark triage, and
+read-only diagnostics:
+
+| Tool | Description |
+|---|---|
+| `gmail_send` | Send an email. Gated by the fail-closed allowlist; supports `dry_run`. |
+| `gmail_read_list` | List recent messages from a mailbox. |
+| `gmail_read_search` | Search messages with a Gmail query string. |
+| `gmail_read_show` | Show a single message by UID or Message-ID. |
+| `gmail_read_thread` | Show all messages in a thread. |
+| `gmail_label_list` / `gmail_label_add` / `gmail_label_remove` | List labels; add/remove a label on a message. |
+| `gmail_mark` | Mark a message read/unread. |
+| `gmail_allow_list` | Show the recipient allowlist (read-only). |
+| `gmail_log` | Show recent sent-mail log entries (metadata). |
+| `gmail_doctor` | Verify credentials over SMTP + IMAP; report allowlist + enforcement. |
+
+### Safety
+
+Every tool delegates directly to the same `run*(opts, deps)` command functions used by the CLI, so
+the fail-closed recipient allowlist, dry-run, and send log all apply unchanged. A blocked recipient
+returns an MCP error result (`isError: true`) rather than crashing the server — proven end-to-end: a
+`gmail_send` to a non-allowlisted address is rejected **before** any SMTP call.
+
+By design, the MCP surface **cannot move its own safety boundary or touch secrets**: there is no
+`gmail_login`/`gmail_init`, no `gmail_allow_add`/`remove`, no `gmail_config_*`, and `gmail_send`
+exposes **no** `no_allowlist` (bypass) or `no_log` (accountability) argument. Widening the allowlist
+or disabling enforcement remains a deliberate human edit to the config files. See the umbrella
+`.ai/guidelines/safety-spec.md` §5.8 for the full rationale.
+
 ## Develop
 
 ```bash

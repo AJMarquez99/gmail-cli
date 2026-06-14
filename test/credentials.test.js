@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { resolveCredentials, resolveConfigPath } from '../src/auth/credentials.js';
-import { MissingCredentialsError } from '../src/lib/errors.js';
+import { MissingCredentialsError, MalformedConfigError } from '../src/lib/errors.js';
 
 describe('resolveConfigPath', () => {
   it('defaults to ~/.config/gmail-cli/credentials.json', () => {
@@ -57,5 +57,19 @@ describe('resolveCredentials', () => {
     });
     expect(readFile).toHaveBeenCalledWith('/custom/creds.json', 'utf8');
     expect(creds).toEqual({ user: 'a@b.com', appPassword: 'pw', source: '/custom/creds.json' });
+  });
+
+  it('treats an empty credentials file as missing', () => {
+    expect(() => resolveCredentials({ env: { HOME: '/home/me' }, readFile: vi.fn(() => '') })).toThrow(
+      MissingCredentialsError,
+    );
+  });
+
+  it('throws MalformedConfigError (exit 2) on a malformed file — not a raw SyntaxError at exit 1', () => {
+    const readFile = vi.fn(() => '{ not json');
+    let thrown;
+    try { resolveCredentials({ env: { HOME: '/home/me' }, readFile }); } catch (e) { thrown = e; }
+    expect(thrown).toBeInstanceOf(MalformedConfigError);
+    expect(thrown.exitCode).toBe(2);
   });
 });

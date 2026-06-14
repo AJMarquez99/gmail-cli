@@ -57,7 +57,7 @@ objects — they don't print or set exit codes themselves.
 | `transport.js` | `createGmailTransport()` — Nodemailer Gmail SMTP |
 | `imap.js` | `createImapClient()` — `imapflow` connection factory |
 | `reader.js` | IMAP read + light-write ops over an already-connected client |
-| `lib/jsonfile.js` | Read/write JSON config files |
+| `lib/jsonfile.js` | `readJson` — the single JSON-parse choke point (throws `MalformedConfigError`) + write/path helpers |
 | `lib/sendlog.js` | Append/read the metadata-only send log (JSONL) |
 | `lib/normalize.js` | Normalize a parsed message into the CLI's shape |
 | `lib/markdown.js` | Markdown → inline-styled HTML (for `send --markdown`) |
@@ -65,6 +65,30 @@ objects — they don't print or set exit codes themselves.
 | `lib/errors.js` | Error classes + exit-code map |
 | `lib/format.js` | All `format*` table renderers |
 | `commands/*` | One file per command group (send/doctor/log/init/login/allow/config/profile/read/label/mark) |
+| `version.js` | `VERSION` — single source, read from `package.json` (used by CLI `--version` and the MCP server) |
+| `mcp/tools.js` | SDK-agnostic `TOOLS` table (name/description/inputSchema/command/mapArgs) |
+| `mcp/server.js` | MCP SDK binding: `buildMcpServer`/`makeToolHandler`/`startMcpServer` |
+
+## MCP layer
+
+A second front-end (`bin/gmail-mcp.js`) over the **same** `run*(opts, deps)` command modules,
+exposed as a stdio Model Context Protocol server, mirroring discord-cli's pattern:
+
+```
+bin/gmail-mcp.js → mcp/server.js (SDK binding) → mcp/tools.js (SDK-agnostic TOOLS) → commands/* (same as CLI)
+```
+
+- `mcp/tools.js` — a plain `TOOLS` array; each entry has `name`, `description`, `inputSchema` (zod raw
+  shape), `command` (a `run*` fn), and `mapArgs` (snake_case MCP args → camelCase `opts`).
+- `mcp/server.js` — `buildMcpServer(deps)` registers every tool; `makeToolHandler` calls
+  `tool.command(tool.mapArgs(args), deps)` and wraps the result as MCP content, catching any
+  `GmailError` into `{ isError: true }` (the server never crashes on a blocked/failed call).
+- **Safety inheritance is the whole point:** tools delegate to the gated command fns with
+  `defaultDeps`, so the fail-closed allowlist, dry-run, and send log all apply. The surface is the
+  **operational verbs only** (send/read/label/mark/allow-list/log/doctor) — it deliberately omits
+  every boundary-mutating or secret-writing command (no `login`/`init`/`allow add|remove`/`config *`),
+  and `gmail_send` exposes no `no_allowlist`/`no_log` arg. See the umbrella `safety-spec.md` §5.8 and
+  [[conventions]].
 
 ## SMTP send path
 
@@ -105,11 +129,14 @@ including the `GMAIL_*` env vars — this backward-compat guarantee is load-bear
 |---|---|---|
 | `0` | success | — |
 | `1` | generic / SMTP / network failure | `GmailError` (default) |
-| `2` | user-fixable config / bad input | `InvalidInputError`, `MissingCredentialsError` |
+| `2` | user-fixable config / bad input | `InvalidInputError`, `MissingCredentialsError`, `MalformedConfigError` |
 | `3` | recipient blocked by the allowlist | `RecipientNotAllowedError` |
 
 `handle()` maps any non-`GmailError` throw to exit `1`. Throw the specific subclass so the exit code
-is correct — see [[conventions]].
+is correct — see [[conventions]]. **Unparseable config files** (`config.json`, `allowlist.json`,
+`credentials.json`) throw `MalformedConfigError` (exit 2) via the single `lib/jsonfile.js#readJson`
+parse choke point — never a raw `SyntaxError` at exit 1. `InvalidInputError` is reserved for bad
+flags/args; `MalformedConfigError` for a bad *file*.
 
 ## Tests & CI
 

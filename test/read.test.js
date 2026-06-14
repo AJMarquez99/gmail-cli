@@ -54,7 +54,7 @@ function makeDeps({ throwInOp = false, messages = {}, searchUids = [1] } = {}) {
       return { exists: searchUids.length };
     },
 
-    async search(criteria, opts) {
+    async search(criteria, _opts) {
       if (throwInOp) throw new Error('search exploded');
       this._lastSearch = criteria;
       return searchUids;
@@ -64,7 +64,7 @@ function makeDeps({ throwInOp = false, messages = {}, searchUids = [1] } = {}) {
       return [];
     },
 
-    fetch(range, query, opts) {
+    fetch(range, _query, _opts) {
       const uids = Array.isArray(range) ? range : [range];
       const msgs = messages;
       async function* gen() {

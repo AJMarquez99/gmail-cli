@@ -4,7 +4,8 @@
   "description": "Gmail CLI with a fail-closed recipient allowlist — send (markdown, attachments, dry-run, threading, send log) plus IMAP read, label, and mark.",
   "type": "module",
   "bin": {
-    "gmail": "./bin/gmail.js"
+    "gmail": "./bin/gmail.js",
+    "gmail-mcp": "./bin/gmail-mcp.js"
   },
   "files": [
     "bin/",
@@ -40,16 +41,22 @@
   },
   "scripts": {
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "commander": "^12.1.0",
     "imapflow": "^1.4.0",
     "mailparser": "^3.9.9",
     "marked": "^18.0.5",
-    "nodemailer": "^8.0.10"
+    "nodemailer": "^8.0.10",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "eslint": "^9.16.0",
+    "globals": "^15.13.0",
     "vitest": "^4.1.8"
   }
 }

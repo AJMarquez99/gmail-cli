@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MissingCredentialsError } from '../lib/errors.js';
+import { readJson } from '../lib/jsonfile.js';
 
 export function resolveConfigPath(env = process.env) {
   if (env.GMAIL_CLI_CONFIG) return env.GMAIL_CLI_CONFIG;
@@ -29,15 +30,14 @@ export function resolveCredentials({ env = process.env, readFile = readFileSync,
   }
 
   const path = explicitPath || resolveConfigPath(env);
-  let raw;
-  try {
-    raw = readFile(path, 'utf8');
-  } catch (err) {
-    if (err.code === 'ENOENT') throw new MissingCredentialsError(path);
-    throw err;
-  }
-
-  const parsed = JSON.parse(raw);
+  // Missing/empty credentials file → MissingCredentialsError; malformed JSON →
+  // MalformedConfigError (exit 2), not a raw SyntaxError leaking at exit 1.
+  const parsed = readJson(path, {
+    readFile,
+    onMissing: () => {
+      throw new MissingCredentialsError(path);
+    },
+  });
   if (!parsed.user || !parsed.appPassword) throw new MissingCredentialsError(path);
   return {
     user: parsed.user,

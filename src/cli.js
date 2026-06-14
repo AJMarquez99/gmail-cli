@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { defaultDeps } from './deps.js';
+import { VERSION } from './version.js';
 import { runSend } from './commands/send.js';
 import { runDoctor } from './commands/doctor.js';
 import { runAllowList, runAllowAdd, runAllowRemove } from './commands/allow.js';
@@ -61,7 +62,7 @@ export function buildProgram(deps = defaultDeps) {
   program
     .name('gmail')
     .description('Gmail CLI — send + IMAP read, with a fail-closed recipient allowlist')
-    .version('0.7.0')
+    .version(VERSION)
     .option('--format <format>', 'output format: json|table', 'json')
     .option('--profile <name>', 'account profile to use');
 

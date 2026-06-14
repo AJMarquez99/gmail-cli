@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readJson } from './lib/jsonfile.js';
 
 export function resolveAllowlistPath(env = process.env) {
   if (env.GMAIL_ALLOWLIST) return env.GMAIL_ALLOWLIST;
@@ -7,19 +8,13 @@ export function resolveAllowlistPath(env = process.env) {
 }
 
 /**
- * Load the recipient allowlist. A missing file yields an empty list — combined with
- * fail-closed enforcement in runSend, that means "deny everyone but self" by default.
+ * Load the recipient allowlist. A missing or empty file yields an empty list — combined with
+ * fail-closed enforcement in runSend, that means "deny everyone but self" by default. A
+ * present-but-malformed file throws MalformedConfigError (exit 2), not a raw parse error.
  */
 export function loadAllowlist({ env = process.env, readFile = readFileSync, path } = {}) {
   const resolvedPath = path || resolveAllowlistPath(env);
-  let raw;
-  try {
-    raw = readFile(resolvedPath, 'utf8');
-  } catch (err) {
-    if (err.code === 'ENOENT') return { recipients: [] };
-    throw err;
-  }
-  const parsed = JSON.parse(raw);
+  const parsed = readJson(resolvedPath, { readFile, onMissing: () => ({ recipients: [] }) });
   return { recipients: Array.isArray(parsed.recipients) ? parsed.recipients : [] };
 }
 
