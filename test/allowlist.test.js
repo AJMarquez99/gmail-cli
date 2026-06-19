@@ -4,6 +4,7 @@ import {
   loadAllowlist,
   makeAllowChecker,
 } from '../src/allowlist.js';
+import { MalformedConfigError } from '../src/lib/errors.js';
 
 describe('resolveAllowlistPath', () => {
   it('defaults to ~/.config/gmail-cli/allowlist.json', () => {
@@ -48,6 +49,18 @@ describe('loadAllowlist', () => {
     const result = loadAllowlist({ env: { HOME: '/h' }, readFile, path: '/custom/allow.json' });
     expect(readFile).toHaveBeenCalledWith('/custom/allow.json', 'utf8');
     expect(result).toEqual({ recipients: [{ email: 'x@y.com' }] });
+  });
+
+  it('treats an empty file as an empty allowlist (fail-closed)', () => {
+    expect(loadAllowlist({ env: { HOME: '/h' }, readFile: vi.fn(() => '') })).toEqual({ recipients: [] });
+  });
+
+  it('throws MalformedConfigError (exit 2) on a malformed file — not a raw parse error', () => {
+    const readFile = vi.fn(() => '{ not json');
+    let thrown;
+    try { loadAllowlist({ env: { HOME: '/h' }, readFile }); } catch (e) { thrown = e; }
+    expect(thrown).toBeInstanceOf(MalformedConfigError);
+    expect(thrown.exitCode).toBe(2);
   });
 });
 

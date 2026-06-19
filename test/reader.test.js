@@ -16,11 +16,11 @@ function fakeClient({ mailboxes = [], searchUids = [], messages = {} } = {}) {
     async list() {
       return mailboxes;
     },
-    async search(criteria, opts) {
+    async search(criteria, _opts) {
       this._lastSearch = criteria;
       return searchUids;
     },
-    fetch(range, query, opts) {
+    fetch(range, query, _opts) {
       this._lastFetch = { range, query };
       const uids = Array.isArray(range) ? range : [range];
       async function* gen() {
@@ -265,7 +265,7 @@ describe('showMessage', () => {
       async search() {
         return [];
       },
-      fetch(range) {
+      fetch(_range) {
         async function* gen() {
           /* yields nothing */
         }

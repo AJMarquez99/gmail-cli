@@ -4,3 +4,7 @@
 #   .ai/knowledge/_secrets.md   ->  ignored
 #   .ai/_scratch/               ->  ignored (whole dir)
 _*
+
+# Internal design plans are kept locally (for the maintainer), not shipped publicly.
+plans/
+!plans/README.md
