@@ -1,6 +1,6 @@
 {
   "name": "@ajmarquez99/gmail-cli",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Gmail CLI with a fail-closed recipient allowlist — send (markdown, attachments, dry-run, threading, send log) plus IMAP read, label, and mark.",
   "type": "module",
   "bin": {
