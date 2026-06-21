@@ -13,7 +13,7 @@ import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
 import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
-import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
+import { runLabelList, runLabelAdd, runLabelRemove, runLabelCreate, runLabelDelete, runLabelRename } from './commands/label.js';
 import { runMark } from './commands/mark.js';
 import { runWhoami } from './commands/whoami.js';
 import { runDraftCreate, runDraftDelete, runDraftSend } from './commands/draft.js';
@@ -249,6 +249,18 @@ export function buildProgram(deps = defaultDeps) {
     .description('Remove a label from a message')
     .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
     .action(handle(runLabelRemove, { table: formatLabelMutation, args: ['uid', 'name'] }, deps));
+  label
+    .command('create <name>')
+    .description('Create a new label')
+    .action(handle(runLabelCreate, { table: formatLabelMutation, args: ['name'] }, deps));
+  label
+    .command('delete <name>')
+    .description('Delete a label')
+    .action(handle(runLabelDelete, { table: formatLabelMutation, args: ['name'] }, deps));
+  label
+    .command('rename <name> <newName>')
+    .description('Rename a label')
+    .action(handle(runLabelRename, { table: formatLabelMutation, args: ['name', 'newName'] }, deps));
 
   program
     .command('mark <uid>')

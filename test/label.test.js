@@ -49,6 +49,21 @@ function makeDeps({ labelList = [], throwInOp = false } = {}) {
       if (throwInOp) throw new Error('flagsRemove exploded');
       this._flagsRemoveCalls.push({ uid, flags, opts });
     },
+
+    async mailboxCreate(_name) {
+      if (throwInOp) throw new Error('mailboxCreate exploded');
+      // No-op for test
+    },
+
+    async mailboxDelete(_name) {
+      if (throwInOp) throw new Error('mailboxDelete exploded');
+      // No-op for test
+    },
+
+    async mailboxRename(_name, _newName) {
+      if (throwInOp) throw new Error('mailboxRename exploded');
+      // No-op for test
+    },
   };
 
   return {
@@ -263,5 +278,96 @@ describe('CLI integration — label list', () => {
     }
     expect(deps._client.connected).toBe(true);
     expect(deps._client.loggedOut).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runLabelCreate
+// ---------------------------------------------------------------------------
+
+describe('runLabelCreate', () => {
+  it('imports and delegates to createLabel', async () => {
+    const { runLabelCreate } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    const result = await runLabelCreate({ name: 'newlabel' }, deps);
+    expect(result).toEqual({ name: 'newlabel', action: 'created' });
+  });
+
+  it('calls connect() and logout() on success', async () => {
+    const { runLabelCreate } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    await runLabelCreate({ name: 'test' }, deps);
+    expect(deps._client.connected).toBe(true);
+    expect(deps._client.loggedOut).toBe(true);
+  });
+
+  it('throws InvalidInputError when name is missing', async () => {
+    const { runLabelCreate } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    await expect(runLabelCreate({}, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runLabelDelete
+// ---------------------------------------------------------------------------
+
+describe('runLabelDelete', () => {
+  it('imports and delegates to deleteLabel', async () => {
+    const { runLabelDelete } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    const result = await runLabelDelete({ name: 'oldlabel' }, deps);
+    expect(result).toEqual({ name: 'oldlabel', action: 'deleted' });
+  });
+
+  it('calls connect() and logout() on success', async () => {
+    const { runLabelDelete } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    await runLabelDelete({ name: 'test' }, deps);
+    expect(deps._client.connected).toBe(true);
+    expect(deps._client.loggedOut).toBe(true);
+  });
+
+  it('throws InvalidInputError when name is missing', async () => {
+    const { runLabelDelete } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    await expect(runLabelDelete({}, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runLabelRename
+// ---------------------------------------------------------------------------
+
+describe('runLabelRename', () => {
+  it('imports and delegates to renameLabel', async () => {
+    const { runLabelRename } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    const result = await runLabelRename({ name: 'old', newName: 'new' }, deps);
+    expect(result).toEqual({ from: 'old', to: 'new', action: 'renamed' });
+  });
+
+  it('calls connect() and logout() on success', async () => {
+    const { runLabelRename } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    await runLabelRename({ name: 'old', newName: 'new' }, deps);
+    expect(deps._client.connected).toBe(true);
+    expect(deps._client.loggedOut).toBe(true);
+  });
+
+  it('throws InvalidInputError when name is missing', async () => {
+    const { runLabelRename } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    await expect(runLabelRename({ newName: 'new' }, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
+  });
+
+  it('throws InvalidInputError when newName is missing', async () => {
+    const { runLabelRename } = await import('../src/commands/label.js');
+    const deps = makeDeps();
+    await expect(runLabelRename({ name: 'old' }, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
   });
 });

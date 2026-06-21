@@ -208,9 +208,13 @@ export function formatLabelList(r) {
 }
 
 /**
- * Format the result of a label add/remove mutation.
+ * Format the result of a label add/remove/create/delete/rename mutation.
  */
 export function formatLabelMutation(r) {
+  if (r.action === 'created') return `created label "${r.name}"`;
+  if (r.action === 'deleted') return `deleted label "${r.name}"`;
+  if (r.action === 'renamed') return `renamed label "${r.from}" → "${r.to}"`;
+  // add/remove
   const direction = r.action === 'added' ? 'to' : 'from';
   return `${r.action} label "${r.label}" ${direction} message ${r.uid}`;
 }

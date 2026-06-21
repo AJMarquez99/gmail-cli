@@ -1,6 +1,6 @@
 import { withClient } from './read.js';
 import { listLabels } from '../reader.js';
-import { addLabel, removeLabel } from '../writer.js';
+import { addLabel, removeLabel, createLabel, deleteLabel, renameLabel } from '../writer.js';
 import { InvalidInputError } from '../lib/errors.js';
 
 /**
@@ -36,4 +36,35 @@ export async function runLabelRemove(opts, deps) {
   return withClient(opts, deps, async (client) =>
     removeLabel(client, { uid: opts.uid, label: opts.name, mailbox: opts.mailbox }),
   );
+}
+
+/**
+ * Create a new Gmail label.
+ *
+ * opts.name — label name
+ */
+export async function runLabelCreate(opts, deps) {
+  if (!opts.name) throw new InvalidInputError('Usage: gmail label create <name>');
+  return withClient(opts, deps, async (client) => createLabel(client, { name: opts.name }));
+}
+
+/**
+ * Delete a Gmail label.
+ *
+ * opts.name — label name
+ */
+export async function runLabelDelete(opts, deps) {
+  if (!opts.name) throw new InvalidInputError('Usage: gmail label delete <name>');
+  return withClient(opts, deps, async (client) => deleteLabel(client, { name: opts.name }));
+}
+
+/**
+ * Rename a Gmail label.
+ *
+ * opts.name    — old label name
+ * opts.newName — new label name
+ */
+export async function runLabelRename(opts, deps) {
+  if (!opts.name || !opts.newName) throw new InvalidInputError('Usage: gmail label rename <name> <newName>');
+  return withClient(opts, deps, async (client) => renameLabel(client, { name: opts.name, newName: opts.newName }));
 }
