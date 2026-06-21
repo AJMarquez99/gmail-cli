@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from '../src/commands/read.js';
 import { buildProgram } from '../src/cli.js';
+import { resolveCapabilities } from '../src/capabilities.js';
 
 // ---------------------------------------------------------------------------
 // Fake imap message factory
@@ -82,6 +83,7 @@ function makeDeps({ throwInOp = false, messages = {}, searchUids = [1] } = {}) {
       legacy: true,
       credentialsPath: '/credentials.json',
       imap: {},
+      capabilities: resolveCapabilities({}),
     })),
     resolveCredentials: vi.fn(() => ({ user: 'u@example.com', appPassword: 'pw' })),
     createImapClient: vi.fn(() => client),

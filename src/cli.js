@@ -9,7 +9,8 @@ import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove } from './commands/profile.js';
-import { GmailError, EXIT_CODES } from './lib/errors.js';
+import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
+import { requiredCapability, profileCan } from './capabilities.js';
 import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
@@ -28,6 +29,14 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// Build the space-joined command path (excluding the root program name) for capability lookup.
+function commandPath(cmd) {
+  const parts = [];
+  let c = cmd;
+  while (c && c.parent) { parts.unshift(c.name()); c = c.parent; }
+  return parts.join(' ');
+}
+
 function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
   return async (...actionArgs) => {
     // Commander calls the action with (pos1, …, posN, optsObject, commandInstance).
@@ -43,6 +52,13 @@ function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
     // Propagate global --profile into opts so every handler sees opts.profile.
     if (opts.profile === undefined) opts.profile = globalOpts.profile;
     try {
+      const cap = requiredCapability(commandPath(cmd), opts);
+      if (cap) {
+        const profile = deps.resolveProfile(opts.profile);
+        if (!profileCan(profile, cap)) {
+          throw new CapabilityDeniedError(cap, profile.name);
+        }
+      }
       if (preprocess) await preprocess(opts);
       const result = await fn(opts, deps);
       if (globalOpts.format === 'table' && table) {

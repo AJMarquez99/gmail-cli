@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { runMark } from '../src/commands/mark.js';
 import { buildProgram } from '../src/cli.js';
 import { InvalidInputError } from '../src/lib/errors.js';
+import { resolveCapabilities } from '../src/capabilities.js';
 
 // ---------------------------------------------------------------------------
 // Fake client + deps builder
@@ -51,6 +52,7 @@ function makeDeps({ throwInOp = false } = {}) {
       legacy: true,
       credentialsPath: '/credentials.json',
       imap: {},
+      capabilities: resolveCapabilities({}),
     })),
     resolveCredentials: vi.fn(() => ({ user: 'u@example.com', appPassword: 'pw' })),
     createImapClient: vi.fn(() => client),
