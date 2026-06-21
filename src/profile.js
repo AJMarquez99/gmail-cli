@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { resolveConfigPath } from './auth/credentials.js';
 import { resolveAllowlistPath } from './allowlist.js';
 import { resolveSendLogPath } from './lib/sendlog.js';
+import { resolveRulesPath } from './rules/storage.js';
 import { InvalidInputError } from './lib/errors.js';
 import { resolveCapabilities } from './capabilities.js';
 
@@ -18,6 +19,7 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
       credentialsPath: resolveConfigPath(env),
       allowlistPath: resolveAllowlistPath(env),
       sendLogPath: resolveSendLogPath(env),
+      rulesPath: resolveRulesPath(env),
       fromName: config.fromName || null,
       replyTo: config.replyTo || null,
       signature: config.signature || null,
@@ -45,6 +47,7 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
     credentialsPath: expand(p.credentialsPath, home) || join(dir, `credentials-${selected}.json`),
     allowlistPath: expand(p.allowlistPath, home) || join(dir, `allowlist-${selected}.json`),
     sendLogPath: expand(p.sendLogPath, home) || join(dir, `sent-${selected}.jsonl`),
+    rulesPath: expand(p.rulesPath, home) || join(dir, `rules-${selected}.json`),
     fromName: p.fromName || null,
     replyTo: p.replyTo || null,
     signature: p.signature || null,

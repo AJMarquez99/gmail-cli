@@ -105,3 +105,15 @@ describe('resolveProfile — capabilities', () => {
     expect(p.capabilities.allowed.has('send')).toBe(false);
   });
 });
+
+describe('resolveProfile — rulesPath', () => {
+  it('legacy: default rules.json', () => {
+    const p = resolveProfile({ env: { HOME: '/h' }, config: {}, name: undefined });
+    expect(p.rulesPath).toBe('/h/.config/gmail-cli/rules.json');
+  });
+  it('profile mode: suffixed default', () => {
+    const config = { profiles: { work: {} }, defaultProfile: 'work' };
+    const p = resolveProfile({ env: { HOME: '/h' }, config, name: 'work' });
+    expect(p.rulesPath).toBe('/h/.config/gmail-cli/rules-work.json');
+  });
+});
