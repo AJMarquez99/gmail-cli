@@ -60,7 +60,7 @@ export class CapabilityDeniedError extends GmailError {
   constructor(bucket, profileName) {
     super(
       `Profile "${profileName}" lacks the "${bucket}" capability for this command.\n` +
-        `Grant it with: gmail profile caps ${profileName} --allow ...  (or adjust --deny).`,
+        `Grant it with: gmail profile caps ${profileName} --allow ... (or adjust --deny).`,
       EXIT_CODES.CAPABILITY_DENIED,
     );
     this.bucket = bucket;
