@@ -82,7 +82,7 @@ export function buildProgram(deps = defaultDeps) {
   const program = new Command();
   program
     .name('gmail')
-    .description('Gmail CLI — send + IMAP read, with a fail-closed recipient allowlist')
+    .description('Gmail CLI — send, read, compose, organize, and rules, with a fail-closed recipient allowlist')
     .version(VERSION)
     .option('--format <format>', 'output format: json|table', 'json')
     .option('--profile <name>', 'account profile to use');

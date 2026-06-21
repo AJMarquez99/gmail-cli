@@ -9,7 +9,9 @@ A Gmail CLI with a fail-closed recipient allowlist.
 Sends over Gmail SMTP and reads over Gmail IMAP, both using an **App Password** — no OAuth, no
 service accounts. `gmail read show` surfaces the Message-ID of any message, which you can pass
 directly to `gmail send --in-reply-to` for a full read-and-reply loop from the terminal or an
-agent — no external connector needed.
+agent — no external connector needed. v1.0.0 adds draft/reply/forward composition, organize
+actions (archive, move, trash, label management), a local rules engine with Gmail filter export,
+and per-profile capability scoping.
 
 ## Install
 
