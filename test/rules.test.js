@@ -110,6 +110,8 @@ describe('runRulesApply (direct)', () => {
     const rep = await runRulesApply({ dryRun: true }, deps);
     expect(rep.dryRun).toBe(true);
     expect(client.calls.some((c) => c[0] === 'remove')).toBe(false);
+    expect(client.logout).toHaveBeenCalled();
+    expect(client.calls.some((c) => c[0] === 'move')).toBe(false);
   });
 });
 
