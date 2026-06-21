@@ -222,7 +222,7 @@ function makeDraftSendDeps({
   const messageDeleteCalls = [];
   const fetchCalls = [];
 
-  // The same fake client is used for BOTH the fetch AND delete withClient calls.
+  // runDraftSend manages one IMAP client directly (single session): fetch, then delete after send.
   const client = {
     connected: false,
     loggedOut: false,
