@@ -24,7 +24,7 @@ still App-Password-only (no OAuth), JSON-by-default, and fail-closed.
 - **Organize:** `gmail archive`, `gmail move <uid> <dest>`, `gmail trash <uid>`,
   `gmail delete <uid> --permanent`; `gmail mark` extended with `--star/--unstar` and
   `--important/--unimportant`; `gmail label create/delete/rename`.
-- **Read additions:** `gmail read count`, `gmail read download <uid> [--dir]`.
+- **Read additions:** `gmail read count`, `gmail read download <target> [--dir]`.
 - **Local rules engine:** per-profile `rules-{name}.json`; `gmail rules add/list/remove/apply`
   (apply is gated `organize` + per-action capability checks, supports `--dry-run`/`--rule`/`--limit`,
   idempotent) and `gmail rules export-xml` (importable Gmail filter XML). Rules cannot permanently
