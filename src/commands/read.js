@@ -109,7 +109,8 @@ export async function runReadDownload(opts, deps) {
       const rawName = a.filename || `attachment-${i + 1}`;
       const safeName = basename(rawName).replace(/^\.+/, '_') || `attachment-${i + 1}`;
       const path = resolve(outDir, safeName);
-      if (path !== outDir && !path.startsWith(outDir + sep)) {
+      const prefix = outDir.endsWith(sep) ? outDir : outDir + sep;
+      if (path !== outDir && !path.startsWith(prefix)) {
         throw new InvalidInputError(`Refusing to write attachment outside ${outDir}: ${rawName}`);
       }
       deps.writeFile(path, a.content);

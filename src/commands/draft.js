@@ -27,25 +27,33 @@ export async function runDraftSend(opts, deps) {
   const profile = deps.resolveProfile(opts.profile);
   const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
 
-  // 1. Fetch the raw draft + parse recipients (one IMAP session for fetch; delete after send).
-  const raw = await withClient(opts, deps, async (client) =>
-    fetchRawMessage(client, { uid: opts.uid, mailbox: DRAFTS }));
-  if (!raw) throw new InvalidInputError(`No draft found at uid ${opts.uid} in ${DRAFTS}.`);
-  const parsed = await deps.parseMessage(raw);
-  const addrs = (field) => (parsed[field]?.value || []).map((a) => a.address).filter(Boolean);
-  const to = addrs('to'), cc = addrs('cc'), bcc = addrs('bcc');
+  // Single IMAP session: fetch the draft, (after SMTP send) delete it, then close.
+  const client = deps.createImapClient(creds, profile.imap || {});
+  await client.connect();
+  try {
+    // 1. Fetch the raw draft + parse recipients.
+    const raw = await fetchRawMessage(client, { uid: opts.uid, mailbox: DRAFTS });
+    if (!raw) throw new InvalidInputError(`No draft found at uid ${opts.uid} in ${DRAFTS}.`);
+    const parsed = await deps.parseMessage(raw);
+    const addrs = (field) => (parsed[field]?.value || []).map((a) => a.address).filter(Boolean);
+    const to = addrs('to'), cc = addrs('cc'), bcc = addrs('bcc');
 
-  // 2. Enforce the allowlist at this transmission boundary (same policy as send).
-  const { enforce, denied } = resolveRecipients({ to, cc, bcc }, opts, { profile, creds }, deps);
-  enforceAllowlist(denied, enforce);
+    // 2. Enforce the allowlist at this transmission boundary (same policy as send).
+    const { enforce, denied } = resolveRecipients({ to, cc, bcc }, opts, { profile, creds }, deps);
+    enforceAllowlist(denied, enforce);
 
-  // 3. Transmit the raw message with an explicit envelope, then delete the draft, then log.
-  const envelope = { from: creds.user, to: [...to, ...cc, ...bcc] };
-  const info = await deps.createTransport(creds).sendMail({ raw, envelope });
-  await withClient(opts, deps, async (client) => deleteMessage(client, { uid: opts.uid, mailbox: DRAFTS }));
+    // 3. Transmit the raw message with an explicit envelope.
+    const envelope = { from: creds.user, to: [...to, ...cc, ...bcc] };
+    const info = await deps.createTransport(creds).sendMail({ raw, envelope });
 
-  logSend({ from: creds.user, to, cc, bcc, subject: parsed.subject || '', messageId: info.messageId },
-    opts, { profile }, deps);
-  return { action: 'draft-sent', uid: Number(opts.uid), to, cc, bcc, subject: parsed.subject || '',
-    messageId: info.messageId, accepted: info.accepted || [] };
+    // 4. Delete the draft (only reached when send succeeds).
+    await deleteMessage(client, { uid: opts.uid, mailbox: DRAFTS });
+
+    logSend({ from: creds.user, to, cc, bcc, subject: parsed.subject || '', messageId: info.messageId },
+      opts, { profile }, deps);
+    return { action: 'draft-sent', uid: Number(opts.uid), to, cc, bcc, subject: parsed.subject || '',
+      messageId: info.messageId, accepted: info.accepted || [] };
+  } finally {
+    await client.logout();
+  }
 }

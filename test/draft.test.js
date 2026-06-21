@@ -364,4 +364,39 @@ describe('runDraftSend', () => {
       spy.mockRestore();
     }
   });
+
+  it('uses exactly ONE IMAP client for fetch + delete (single connect/logout round-trip)', async () => {
+    const { runDraftSend } = await import('../src/commands/draft.js');
+    const deps = makeDraftSendDeps();
+
+    await runDraftSend({ uid: '5' }, deps);
+
+    // createImapClient must have been called exactly once
+    expect(deps.createImapClient).toHaveBeenCalledOnce();
+
+    // The single client must have been connected and logged out
+    expect(deps._client.connected).toBe(true);
+    expect(deps._client.loggedOut).toBe(true);
+
+    // The draft was deleted via messageDelete
+    expect(deps._client._messageDeleteCalls).toHaveLength(1);
+    expect(deps._client._messageDeleteCalls[0].uid).toBe(5);
+  });
+
+  it('does NOT delete the draft if sendMail throws (draft preserved on send failure)', async () => {
+    const { runDraftSend } = await import('../src/commands/draft.js');
+    const deps = makeDraftSendDeps({
+      sendMailResult: null,
+    });
+    deps.createTransport = vi.fn(() => ({
+      sendMail: vi.fn(async () => { throw new Error('SMTP failure'); }),
+    }));
+
+    await expect(runDraftSend({ uid: '5' }, deps)).rejects.toThrow('SMTP failure');
+
+    // Draft must NOT be deleted
+    expect(deps._client._messageDeleteCalls).toHaveLength(0);
+    // logout still called (finally block)
+    expect(deps._client.loggedOut).toBe(true);
+  });
 });
