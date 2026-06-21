@@ -11,12 +11,13 @@ import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
 import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
 import { runMark } from './commands/mark.js';
 import { runWhoami } from './commands/whoami.js';
 import { runDraftCreate, runDraftDelete, runDraftSend } from './commands/draft.js';
+import { runArchive, runMove, runTrash, runDelete } from './commands/organize.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -301,6 +302,20 @@ export function buildProgram(deps = defaultDeps) {
     .option('--no-allowlist', 'disable the recipient allowlist for this send')
     .option('--no-log', 'do not append this send to the send log')
     .action(handle(runDraftSend, { table: formatDraft, args: ['uid'] }, deps));
+
+  program.command('archive <uid>').description('Archive a message (remove it from the inbox)')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runArchive, { table: formatOrganize, args: ['uid'] }, deps));
+  program.command('move <uid> <destination>').description('Move a message to another mailbox/label')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runMove, { table: formatOrganize, args: ['uid', 'destination'] }, deps));
+  program.command('trash <uid>').description('Move a message to Trash (recoverable)')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runTrash, { table: formatOrganize, args: ['uid'] }, deps));
+  program.command('delete <uid>').description('Permanently delete a message (requires --permanent)')
+    .option('--permanent', 'confirm permanent, irreversible deletion')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runDelete, { table: formatOrganize, args: ['uid'] }, deps));
 
   return program;
 }

@@ -229,6 +229,11 @@ export function formatDraft(r) {
   return `draft ${verb} (uid ${r.uid}) → ${(r.to || []).join(', ')} · ${r.subject}`;
 }
 
+export function formatOrganize(r) {
+  if (r.action === 'moved') return `moved uid ${r.uid}: ${r.from} → ${r.to}`;
+  return `${r.action} uid ${r.uid}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',
