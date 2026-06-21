@@ -1,4 +1,4 @@
-const DRAFTS = '[Gmail]/Drafts';
+export const DRAFTS = '[Gmail]/Drafts';
 
 /** APPEND a raw RFC822 message to the Drafts mailbox with the \Draft flag. */
 export async function appendDraft(client, raw) {

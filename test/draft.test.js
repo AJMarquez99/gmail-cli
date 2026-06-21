@@ -118,6 +118,59 @@ describe('runDraftCreate', () => {
 });
 
 // ---------------------------------------------------------------------------
+// runDraftDelete
+// ---------------------------------------------------------------------------
+
+describe('runDraftDelete', () => {
+  it('opens Drafts and deletes the message by UID', async () => {
+    const mailboxOpenCalls = [];
+    const deleteMessageCalls = [];
+    const client = {
+      connected: false,
+      loggedOut: false,
+      async connect() {
+        this.connected = true;
+      },
+      async logout() {
+        this.loggedOut = true;
+      },
+      async mailboxOpen(mbox) {
+        mailboxOpenCalls.push(mbox);
+      },
+      async messageDelete(uid, opts) {
+        deleteMessageCalls.push({ uid, opts });
+      },
+    };
+    const deps = {
+      resolveProfile: vi.fn(() => ({
+        name: '(default)',
+        legacy: true,
+        credentialsPath: '/credentials.json',
+        imap: {},
+        fromName: null,
+        replyTo: null,
+        signature: null,
+        capabilities: resolveCapabilities({}),
+      })),
+      resolveCredentials: vi.fn(() => ({ user: 'me@example.com', appPassword: 'pw' })),
+      createImapClient: vi.fn(() => client),
+      _client: client,
+    };
+
+    const { runDraftDelete } = await import('../src/commands/draft.js');
+    const result = await runDraftDelete({ uid: '42' }, deps);
+
+    expect(mailboxOpenCalls).toHaveLength(1);
+    expect(mailboxOpenCalls[0]).toBe('[Gmail]/Drafts');
+    expect(deleteMessageCalls).toHaveLength(1);
+    expect(deleteMessageCalls[0]).toEqual({ uid: 42, opts: { uid: true } });
+    expect(result.action).toBe('draft-deleted');
+    expect(result.uid).toBe(42);
+    expect(result.mailbox).toBe('[Gmail]/Drafts');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // CLI integration
 // ---------------------------------------------------------------------------
 
