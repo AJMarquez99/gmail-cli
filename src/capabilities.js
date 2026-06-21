@@ -62,6 +62,7 @@ export const COMMAND_CAPABILITY = {
   'label add': CAPS.ORGANIZE,
   'label remove': CAPS.ORGANIZE,
   mark: CAPS.ORGANIZE,
+  'draft create': CAPS.DRAFT,
   // always-allowed (local config / diagnostics / introspection):
   doctor: null,
   init: null,

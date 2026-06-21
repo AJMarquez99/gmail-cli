@@ -11,11 +11,12 @@ import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
 import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
 import { runMark } from './commands/mark.js';
 import { runWhoami } from './commands/whoami.js';
+import { runDraftCreate } from './commands/draft.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -255,6 +256,41 @@ export function buildProgram(deps = defaultDeps) {
     .option('--unread', 'mark as unread')
     .option('--mailbox <name>', 'mailbox', 'INBOX')
     .action(handle(runMark, { table: formatMark, args: ['uid'] }, deps));
+
+  const draft = program.command('draft').description('Manage email drafts');
+  draft
+    .command('create')
+    .description('Save a new draft to the Drafts mailbox (no allowlist — nothing is sent)')
+    .option('--to <addr>', 'recipient (repeatable; comma-separated ok)', collect, [])
+    .option('--cc <addr>', 'cc recipient (repeatable)', collect, [])
+    .option('--bcc <addr>', 'bcc recipient (repeatable)', collect, [])
+    .option('--subject <text>', 'subject line')
+    .option('--body <text>', 'plain-text body (or pipe it on stdin)')
+    .option('--html <html>', 'HTML body')
+    .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
+    .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
+    .option('--reply-to <addr>', 'Reply-To address')
+    .option('--from-name <name>', 'display name on the From header')
+    .option('--in-reply-to <messageId>', 'Message-ID this draft replies to (threads it)')
+    .option('--references <id>', 'References header id (repeatable; comma-separated ok)', collect, [])
+    .option('--no-signature', 'do not append the configured signature')
+    .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
+    .action(
+      handle(
+        runDraftCreate,
+        {
+          table: formatDraft,
+          // If no body/html given, fall back to piped stdin.
+          preprocess: async (opts) => {
+            if (!opts.body && !opts.html) {
+              const piped = await readStdin();
+              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
+            }
+          },
+        },
+        deps,
+      ),
+    );
 
   return program;
 }

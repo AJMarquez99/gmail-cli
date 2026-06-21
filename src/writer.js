@@ -1,3 +1,18 @@
+const DRAFTS = '[Gmail]/Drafts';
+
+/** APPEND a raw RFC822 message to the Drafts mailbox with the \Draft flag. */
+export async function appendDraft(client, raw) {
+  const res = await client.append(DRAFTS, raw, ['\\Draft']);
+  return { uid: res && res.uid, mailbox: DRAFTS };
+}
+
+/** Permanently delete a message by UID from a mailbox (used for draft discard/cleanup). */
+export async function deleteMessage(client, { uid, mailbox }) {
+  await client.mailboxOpen(mailbox);
+  await client.messageDelete(Number(uid), { uid: true });
+  return { uid: Number(uid), mailbox, action: 'deleted' };
+}
+
 /**
  * Add a Gmail label to a message via X-GM-LABELS.
  *

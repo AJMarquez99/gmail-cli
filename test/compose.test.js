@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildMessage } from '../src/compose.js';
+import { buildMessage, buildRawMime } from '../src/compose.js';
+import { simpleParser } from 'mailparser';
 
 const ctx = { profile: { fromName: null, replyTo: null, signature: null }, creds: { user: 'me@x.com' } };
 const deps = { statFile: () => ({ isFile: () => true, size: 10 }) };
@@ -36,4 +37,14 @@ describe('buildMessage', () => {
       { ...ctx, profile: { ...ctx.profile, signature: { text: '-- Me', html: '<p>-- Me</p>' } } }, deps);
     expect(m.text).toContain('-- Me');
   });
+});
+
+it('buildRawMime produces parseable RFC822', async () => {
+  const { message } = buildMessage({ to: ['a@x.com'], cc: [], bcc: [] },
+    { subject: 'Hi', body: 'Hello' }, ctx, deps);
+  const raw = await buildRawMime(message);
+  expect(Buffer.isBuffer(raw)).toBe(true);
+  const parsed = await simpleParser(raw);
+  expect(parsed.subject).toBe('Hi');
+  expect(parsed.to.text).toContain('a@x.com');
 });

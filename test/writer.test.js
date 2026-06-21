@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addLabel, removeLabel, markMessage } from '../src/writer.js';
+import { addLabel, removeLabel, markMessage, appendDraft } from '../src/writer.js';
 
 // ---------------------------------------------------------------------------
 // Fake imapflow client for write operations
@@ -180,4 +180,17 @@ describe('markMessage', () => {
     const client = fakeWriteClient({ throwInOp: true });
     await expect(markMessage(client, { uid: '1', seen: false, mailbox: 'INBOX' })).rejects.toThrow('flagsRemove exploded');
   });
+});
+
+// ---------------------------------------------------------------------------
+// appendDraft
+// ---------------------------------------------------------------------------
+
+it('appendDraft APPENDs to [Gmail]/Drafts with \\Draft and returns uid', async () => {
+  const calls = [];
+  const client = { append: async (mbox, buf, flags) => { calls.push([mbox, flags]); return { uid: 42 }; } };
+  const r = await appendDraft(client, Buffer.from('raw'));
+  expect(calls[0][0]).toBe('[Gmail]/Drafts');
+  expect(calls[0][1]).toEqual(['\\Draft']);
+  expect(r).toEqual({ uid: 42, mailbox: '[Gmail]/Drafts' });
 });

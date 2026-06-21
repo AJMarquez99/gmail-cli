@@ -224,6 +224,10 @@ export function formatWhoami(r) {
   ].join('\n');
 }
 
+export function formatDraft(r) {
+  return `draft ${r.action === 'draft-created' ? 'created' : r.action} (uid ${r.uid}) → ${(r.to || []).join(', ')} · ${r.subject}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',

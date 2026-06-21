@@ -1,9 +1,15 @@
 import { basename, resolve as resolvePath } from 'node:path';
+import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { InvalidInputError } from './lib/errors.js';
 import { renderMarkdown } from './lib/markdown.js';
 
 const GMAIL_MAX_BYTES = 25 * 1024 * 1024;
 const WARN_BYTES = 20 * 1024 * 1024;
+
+/** Compile a nodemailer message object into a raw RFC822 Buffer (for IMAP APPEND). */
+export function buildRawMime(message) {
+  return new MailComposer(message).compile().build();
+}
 
 export function toList(value) {
   if (value == null) return [];
