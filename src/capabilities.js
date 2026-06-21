@@ -58,6 +58,8 @@ export const COMMAND_CAPABILITY = {
   'read search': CAPS.READ,
   'read show': CAPS.READ,
   'read thread': CAPS.READ,
+  'read count': CAPS.READ,
+  'read download': CAPS.READ,
   'label list': CAPS.READ,
   'label add': CAPS.ORGANIZE,
   'label remove': CAPS.ORGANIZE,

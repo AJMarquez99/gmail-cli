@@ -238,6 +238,14 @@ export function formatOrganize(r) {
   return `${r.action} uid ${r.uid}`;
 }
 
+export function formatCount(r) { return `${r.mailbox}: ${r.total} total, ${r.unread} unread`; }
+
+export function formatDownload(r) {
+  return r.attachments.length
+    ? `downloaded ${r.attachments.length} attachment(s) → ${r.dir}:\n` + r.attachments.map((a) => `  ${a.filename} (${a.bytes}b)`).join('\n')
+    : `no attachments on uid ${r.uid}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',

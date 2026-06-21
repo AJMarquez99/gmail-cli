@@ -11,8 +11,8 @@ import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
 import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize } from './lib/format.js';
-import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize, formatCount, formatDownload } from './lib/format.js';
+import { runReadList, runReadSearch, runReadShow, runReadThread, runReadCount, runReadDownload } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove, runLabelCreate, runLabelDelete, runLabelRename } from './commands/label.js';
 import { runMark } from './commands/mark.js';
 import { runWhoami } from './commands/whoami.js';
@@ -233,6 +233,13 @@ export function buildProgram(deps = defaultDeps) {
     .description('Show all messages in a thread')
     .option('--mailbox <name>', 'mailbox/label', '[Gmail]/All Mail')
     .action(handle(runReadThread, { table: formatThread, args: ['threadId'] }, deps));
+  read.command('count').description('Count total + unread messages in a mailbox')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .action(handle(runReadCount, { table: formatCount }, deps));
+  read.command('download <target>').description('Download a message\'s attachments to a directory')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .option('--dir <path>', 'output directory', '.')
+    .action(handle(runReadDownload, { table: formatDownload, args: ['target'] }, deps));
 
   const label = program.command('label').description('Manage Gmail labels');
   label
