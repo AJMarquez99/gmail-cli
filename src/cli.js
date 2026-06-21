@@ -11,10 +11,11 @@ import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
 import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
 import { runMark } from './commands/mark.js';
+import { runWhoami } from './commands/whoami.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -124,6 +125,11 @@ export function buildProgram(deps = defaultDeps) {
     .command('doctor')
     .description('Check credentials and verify Gmail SMTP + IMAP')
     .action(handle(runDoctor, { table: formatDoctor }, deps));
+
+  program
+    .command('whoami')
+    .description('Show the resolved profile, account, and capability scope')
+    .action(handle(runWhoami, { table: formatWhoami }, deps));
 
   program
     .command('init')

@@ -211,6 +211,15 @@ export function formatLabelMutation(r) {
   return `${r.action} label "${r.label}" ${direction} message ${r.uid}`;
 }
 
+export function formatWhoami(r) {
+  return [
+    `profile:      ${r.profile}`,
+    `account:      ${r.account || '(no credentials)'}`,
+    `mode:         ${r.mode}`,
+    `capabilities: ${r.capabilities.join(', ')}`,
+  ].join('\n');
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',
