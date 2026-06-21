@@ -444,6 +444,92 @@ gmail log
 gmail sent --limit 5
 ```
 
+## Compose: draft, reply, forward
+
+### Drafts
+
+```bash
+# Create a draft (same flags as `gmail send`): saved to [Gmail]/Drafts. No allowlist check —
+# nothing is transmitted, so a send-denied profile can still draft.
+gmail draft create --to alice@example.com --subject "Proposal" --body "Draft for review"
+
+# Send a stored draft by UID: enforces the allowlist, transmits, then deletes the draft and logs it.
+gmail draft send 42
+
+# Discard a draft by UID
+gmail draft delete 42
+```
+
+> There is no `draft list`/`draft show` — use `gmail read list --mailbox '[Gmail]/Drafts'` and
+> `gmail read show <uid> --mailbox '[Gmail]/Drafts'`.
+
+**Notes:** `draft send` transmits to the recipients stored in the draft **at create time** (editing
+the draft elsewhere is honored; the allowlist is checked against those stored recipients on send). A
+`Bcc` saved into a draft is not visible in Gmail's draft UI but **is** sent when the draft is sent.
+
+### Reply
+
+```bash
+# Threaded reply by UID (sets In-Reply-To/References, derives the Re: subject and recipient).
+# Quotes the original by default. Body via flag or stdin.
+gmail reply 17 --body "Sounds good — shipping today."
+
+# Reply-all (cc all original recipients minus yourself)
+gmail reply 17 --all --body "Looping everyone in."
+
+# Stage the reply as a draft instead of sending (capability: draft, not send)
+gmail reply 17 --draft --body "Hold for review"
+
+# Suppress the quoted original
+gmail reply 17 --no-quote --body "..."
+```
+
+`reply` is `send` by default and `draft` with `--draft` (a dynamic capability). Other flags:
+`--html`, `--markdown`/`--no-style`, `--from-name`, `--no-signature`, `--attach`, `--no-allowlist`,
+`--no-log`, `--mailbox` (source mailbox, default `INBOX`).
+
+### Forward
+
+```bash
+# Forward a message, re-attaching the original attachments; --to is required.
+gmail forward 17 --to bob@example.com --body "FYI — see below."
+```
+
+Flags: `--to` (repeatable/comma-separated), `--body` (optional intro), `--markdown`/`--no-style`,
+`--from-name`, `--no-signature`, `--no-allowlist`, `--no-log`, `--mailbox`.
+
+## Organize
+
+```bash
+# Archive (remove from inbox; keeps the message in All Mail)
+gmail archive 17
+
+# Move to another mailbox/label
+gmail move 17 "Saved"
+
+# Star / important toggles (alongside --read/--unread)
+gmail mark 17 --star          # or --unstar
+gmail mark 17 --important     # or --unimportant
+
+# Label taxonomy management
+gmail label create "Outreach/Acme"
+gmail label rename "Outreach/Acme" "Clients/Acme"
+gmail label delete "Clients/Acme"
+
+# Counts + attachment download
+gmail read count --mailbox INBOX
+gmail read download 17 --dir ./attachments
+
+# Trash (recoverable) vs permanent delete
+gmail trash 17
+gmail delete 17 --permanent    # refuses without --permanent; points you to `trash`
+```
+
+`mark` requires exactly one action flag. `archive`/`move`/`mark`/`label create|delete|rename` need
+the `organize` capability; `trash`/`delete` need `delete`. **Permanent `delete` always requires
+`--permanent`** on top of the `delete` capability — there is no interactive confirmation (it would
+not fit the JSON/agentic model), so `--permanent` is the explicit intent guard.
+
 ## Commands
 
 | Command | Description |
@@ -451,15 +537,29 @@ gmail sent --limit 5
 | `gmail init` | Scaffold `~/.config/gmail-cli/` (allowlist.json + config.json) and print setup steps. |
 | `gmail login` | Guided credential setup — prompts for email and App Password (hidden), writes credentials.json at chmod 600. |
 | `gmail send` | Send an email (text/HTML/Markdown, to/cc/bcc, attachments, threading, dry-run). Enforces the allowlist. |
+| `gmail draft create` | Save a new draft to Drafts (same flags as `send`; no allowlist — nothing is sent). |
+| `gmail draft send <uid>` | Send a stored draft (enforces the allowlist), then delete it. |
+| `gmail draft delete <uid>` | Discard a draft by UID. |
+| `gmail reply <uid>` | Threaded reply (`--all`, `--no-quote`, `--draft`). Enforces the allowlist on send. |
+| `gmail forward <uid> --to <addr>` | Forward a message, re-attaching original attachments. |
 | `gmail doctor` | Check credentials, verify Gmail SMTP and IMAP connections, report allowlist size. |
 | `gmail read list` | List recent messages (newest first). Options: `--mailbox`, `--limit`, `--unread`. |
 | `gmail read search <query>` | Search with a Gmail query string (same syntax as the Gmail search box). Options: `--mailbox`, `--limit`. |
 | `gmail read show <uid\|message-id>` | Show a full message by UID or Message-ID. Options: `--mailbox`. (HTML body is in the `html` field of `--format json` output.) |
 | `gmail read thread <thread-id>` | Show all messages in a thread (oldest first). Options: `--mailbox`. |
+| `gmail read count` | Count total + unread messages in a mailbox. Options: `--mailbox`. |
+| `gmail read download <uid>` | Download a message's attachments to a directory. Options: `--mailbox`, `--dir`. |
+| `gmail archive <uid>` | Archive a message (remove it from the inbox). Options: `--mailbox`. |
+| `gmail move <uid> <destination>` | Move a message to another mailbox/label. Options: `--mailbox`. |
+| `gmail trash <uid>` | Move a message to Trash (recoverable). Options: `--mailbox`. |
+| `gmail delete <uid> --permanent` | Permanently delete a message (requires `--permanent`). Options: `--mailbox`. |
 | `gmail label list` | List all labels/folders on the account. |
 | `gmail label add <uid> <name>` | Add a label to a message by UID. Options: `--mailbox`. |
 | `gmail label remove <uid> <name>` | Remove a label from a message by UID. Options: `--mailbox`. |
-| `gmail mark <uid> --read\|--unread` | Mark a message as read or unread. Options: `--mailbox`. Exactly one of `--read` or `--unread` is required. |
+| `gmail label create <name>` | Create a new label. |
+| `gmail label delete <name>` | Delete a label. |
+| `gmail label rename <name> <newName>` | Rename a label. |
+| `gmail mark <uid> --read\|--unread\|--star\|--unstar\|--important\|--unimportant` | Mark a message. Options: `--mailbox`. Exactly one action flag is required. |
 | `gmail allow list` | List allowed recipients and their aliases (read-only). |
 | `gmail allow add <email>` | Add a recipient to the allowlist (idempotent; merges aliases if entry already exists). |
 | `gmail allow remove <email\|alias>` | Remove a recipient by email address or alias. |
