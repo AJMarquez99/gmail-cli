@@ -255,6 +255,31 @@ export function formatForward(r) {
   return `forwarded → ${(r.to || []).join(', ')} · ${r.subject}` + (r.attachments && r.attachments.length ? ` (+${r.attachments.length} attachment(s))` : '');
 }
 
+export function formatRulesMutation(r) {
+  return `${r.action} rule "${r.id}"`;
+}
+
+export function formatRulesList(r) {
+  if (!r.rules.length) return 'no rules defined';
+  return r.rules
+    .map((x) => `${x.id}: [${x.match}] → ${x.actions.join(', ')}${x.mailbox && x.mailbox !== 'INBOX' ? ` (in ${x.mailbox})` : ''}`)
+    .join('\n');
+}
+
+export function formatRulesApply(r) {
+  const head = r.dryRun ? '(dry-run) ' : '';
+  const lines = r.rules.map((e) => {
+    const skipped = e.skipped.length ? `, ${e.skipped.length} skipped` : '';
+    const errors = e.errors.length ? `, ${e.errors.length} error(s)` : '';
+    return `${head}${e.id}: ${e.matched} matched, ${e.applied.length} action(s) applied${skipped}${errors}`;
+  });
+  return lines.join('\n') || `${head}no rules applied`;
+}
+
+export function formatRulesXml(r) {
+  return r.xml;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',

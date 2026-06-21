@@ -11,7 +11,7 @@ import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
 import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize, formatCount, formatDownload, formatReply, formatForward } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize, formatCount, formatDownload, formatReply, formatForward, formatRulesMutation, formatRulesList, formatRulesApply, formatRulesXml } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread, runReadCount, runReadDownload } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove, runLabelCreate, runLabelDelete, runLabelRename } from './commands/label.js';
 import { runMark } from './commands/mark.js';
@@ -19,6 +19,7 @@ import { runWhoami } from './commands/whoami.js';
 import { runDraftCreate, runDraftDelete, runDraftSend } from './commands/draft.js';
 import { runArchive, runMove, runTrash, runDelete } from './commands/organize.js';
 import { runReply, runForward } from './commands/reply.js';
+import { runRulesAdd, runRulesList, runRulesRemove, runRulesApply, runRulesExportXml } from './commands/rules.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -388,6 +389,41 @@ export function buildProgram(deps = defaultDeps) {
         deps,
       ),
     );
+
+  const rules = program.command('rules').description('Local rules engine: define, apply, export to Gmail filter XML');
+  rules
+    .command('add')
+    .description('Define a rule (match → actions). Always allowed; applying is gated.')
+    .option('--match <query>', 'Gmail search query (gmraw) the rule matches')
+    .option('--id <id>', 'stable rule id (default: slug of the match)')
+    .option('--label <name>', 'add a label')
+    .option('--archive', 'archive (remove from inbox)')
+    .option('--mark <state>', 'mark state (read)')
+    .option('--star', 'star the message')
+    .option('--important', 'mark important')
+    .option('--move <mailbox>', 'move to a mailbox/label')
+    .option('--trash', 'move to Trash (requires the delete capability to apply)')
+    .option('--mailbox <name>', 'mailbox to search when applying', 'INBOX')
+    .action(handle(runRulesAdd, { table: formatRulesMutation }, deps));
+  rules
+    .command('list')
+    .description('List defined rules')
+    .action(handle(runRulesList, { table: formatRulesList }, deps));
+  rules
+    .command('remove <id>')
+    .description('Remove a rule by id')
+    .action(handle(runRulesRemove, { table: formatRulesMutation, args: ['id'] }, deps));
+  rules
+    .command('apply')
+    .description('Apply rules now over IMAP (organize baseline + per-action capability checks)')
+    .option('--dry-run', 'report what would change without mutating')
+    .option('--rule <id>', 'apply only this rule')
+    .option('--limit <n>', 'cap matched messages per rule')
+    .action(handle(runRulesApply, { table: formatRulesApply }, deps));
+  rules
+    .command('export-xml')
+    .description('Emit Gmail filter import XML (Settings → Filters → Import) to stdout')
+    .action(handle(runRulesExportXml, { table: formatRulesXml }, deps));
 
   program.command('archive <uid>').description('Archive a message (remove it from the inbox)')
     .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')

@@ -76,6 +76,11 @@ export const COMMAND_CAPABILITY = {
   'draft send': CAPS.SEND,
   reply: (o) => (o.draft ? 'draft' : 'send'),
   forward: CAPS.SEND,
+  'rules apply': CAPS.ORGANIZE,
+  'rules add': null,
+  'rules list': null,
+  'rules remove': null,
+  'rules export-xml': null,
   // always-allowed (local config / diagnostics / introspection):
   doctor: null,
   init: null,
