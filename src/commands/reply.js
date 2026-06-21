@@ -57,6 +57,10 @@ export async function runReply(opts, deps) {
     return { action: 'reply-drafted', uid: res.uid, mailbox: res.mailbox, to, cc, subject };
   }
 
+  if (to.length === 0) {
+    throw new InvalidInputError('Cannot derive a reply recipient (original has no From/Reply-To). Use --draft to stage one, or specify recipients on a fresh send.');
+  }
+
   const { enforce, denied } = resolveRecipients({ to, cc, bcc: [] }, opts, { profile, creds }, deps);
   enforceAllowlist(denied, enforce);
   const info = await deps.createTransport(creds).sendMail(message);

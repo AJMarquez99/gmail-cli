@@ -346,6 +346,55 @@ describe('runReply — References threading', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Empty-recipient guard (no From + no Reply-To)
+// ---------------------------------------------------------------------------
+
+const PARSED_NO_SENDER = {
+  subject: 'Orphan',
+  from: null,
+  replyTo: null,
+  to: { value: [{ address: 'me@example.com' }] },
+  cc: { value: [] },
+  messageId: '<orphan>',
+  references: undefined,
+  text: 'orphan body',
+};
+
+describe('runReply — empty-recipient guard', () => {
+  it('send path: throws InvalidInputError when original has no From/Reply-To', async () => {
+    const deps = makeDeps({ parsedMessage: PARSED_NO_SENDER });
+    await expect(
+      runReply({ uid: '10', mailbox: 'INBOX', body: 'reply' }, deps),
+    ).rejects.toThrow(InvalidInputError);
+    expect(deps._sendMail).not.toHaveBeenCalled();
+  });
+
+  it('send path: error message mentions From/Reply-To', async () => {
+    const deps = makeDeps({ parsedMessage: PARSED_NO_SENDER });
+    let err;
+    try {
+      await runReply({ uid: '10', mailbox: 'INBOX' }, deps);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(InvalidInputError);
+    expect(err.message).toMatch(/From\/Reply-To/i);
+  });
+
+  it('draft path: does NOT throw when original has no From/Reply-To (draft is allowed)', async () => {
+    const client = makeClient({ appendResult: { uid: 55 } });
+    const deps = makeDeps({ client, parsedMessage: PARSED_NO_SENDER });
+    // Should not throw — drafting an empty-recipient reply is acceptable
+    const result = await runReply(
+      { uid: '10', mailbox: 'INBOX', body: 'draft reply', draft: true },
+      deps,
+    );
+    expect(result.action).toBe('reply-drafted');
+    expect(deps._sendMail).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runForward
 // ---------------------------------------------------------------------------
 
