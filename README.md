@@ -323,6 +323,70 @@ gmail config set allowlist.enforce false
 
 The `--no-allowlist` flag overrides the config for a single send regardless of what the config says. To re-enable, run `gmail config set allowlist.enforce true` (or `gmail config unset allowlist.enforce`) and drop `--no-allowlist`.
 
+## Permissions & capabilities
+
+Each profile can be scoped to a least-privilege set of **capabilities** — so you can attach, say, a
+business email that may *read, organize, and draft* but can **never send**. Scoping is fail-closed
+and layered on top of the recipient allowlist.
+
+### The five buckets
+
+| Bucket | Grants |
+|---|---|
+| `read` | `read list/search/show/thread/count/download`, `label list` |
+| `organize` | `label add/remove`, `label create/delete/rename`, `mark` (read/star/important), `archive`, `move`, `rules apply` |
+| `draft` | `draft create`, `draft delete`, `reply --draft` |
+| `send` | `send`, `reply`, `forward`, `draft send` |
+| `delete` | `trash`, `delete` |
+
+Always-allowed (never gated): `init`, `login`, `doctor`, `config`, `profile`, `allow`, `whoami`,
+`log`, and `rules add/list/remove/export-xml` (defining or exporting rules never touches the mailbox
+— only `rules apply` does).
+
+### Allowlist vs denylist (pick one)
+
+Configure a profile with **either** an allowlist or a denylist — never both:
+
+```jsonc
+// allowlist (recommended): only the listed buckets are granted, fail-closed on growth
+"business": { "capabilities": ["read", "organize", "draft"] }
+
+// denylist: everything except the listed buckets
+"vendor":   { "deny": ["send", "delete"] }
+```
+
+- **Absent both keys → unrestricted** (full back-compat; existing and legacy single-account configs
+  are unaffected, no migration needed).
+- **Both keys present → config error** (exit `2`).
+- An unknown bucket name → config error (exit `2`).
+
+### Managing & inspecting
+
+```bash
+# Set a profile's scope (writes config.json; validates buckets)
+gmail profile caps business --allow read,organize,draft
+gmail profile caps vendor --deny send,delete
+# Show the current effective scope
+gmail profile caps business
+
+# Show the resolved profile, account, mode, and granted buckets
+gmail whoami
+
+# doctor also prints each profile's capabilities alongside SMTP/IMAP/allowlist checks
+gmail doctor
+```
+
+A command whose bucket the active profile lacks is rejected **before it runs** with exit code `4`
+(CAPABILITY_DENIED) — distinct from `3` (recipient blocked by the allowlist), so agents can branch on
+which boundary stopped them.
+
+### The transmission boundary
+
+The allowlist is enforced **only at the moment of transmission** (`send`, `draft send`, a real
+`reply`/`forward`) — never on draft creation or `reply --draft`. So a `send`-denied,
+`draft`-capable profile can compose and stage outreach for human review but physically cannot
+transmit it.
+
 ## Usage
 
 Output is JSON by default; add `--format table` for a human-readable summary.
@@ -407,8 +471,10 @@ gmail sent --limit 5
 | `gmail profile list` | List all profiles, marking the default. |
 | `gmail profile use <name>` | Set a profile as the default. |
 | `gmail profile remove <name>` | Unregister a profile from config (files left on disk). |
+| `gmail profile caps <name>` | Show or set a profile's capability scope (`--allow b,b` or `--deny b,b`). |
+| `gmail whoami` | Show the resolved profile, account, capability mode, and granted buckets. |
 
-Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients, bad attachment) · `3` recipient blocked by allowlist.
+Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` recipient blocked by allowlist · `4` capability denied (command's bucket not granted to the profile).
 
 `--dry-run` always exits `0` (even if recipients would be blocked — denials are reported in the output, not the exit code).
 
@@ -530,6 +596,7 @@ gmail log --limit 5 # show last 5
 | `GMAIL_CLI_SETTINGS` | Path to non-secret config JSON (default: `~/.config/gmail-cli/config.json`) |
 | `GMAIL_SEND_LOG` | Path to sent-mail JSONL log (default: `~/.config/gmail-cli/sent.jsonl`) |
 | `GMAIL_ALLOWLIST` | Path to allowlist JSON (default: `~/.config/gmail-cli/allowlist.json`) |
+| `GMAIL_RULES` | Path to the rules JSON (default: `~/.config/gmail-cli/rules.json`; per-profile: `rules-{name}.json`) |
 
 ## Security notes
 
