@@ -64,6 +64,7 @@ export const COMMAND_CAPABILITY = {
   mark: CAPS.ORGANIZE,
   'draft create': CAPS.DRAFT,
   'draft delete': CAPS.DRAFT,
+  'draft send': CAPS.SEND,
   // always-allowed (local config / diagnostics / introspection):
   doctor: null,
   init: null,

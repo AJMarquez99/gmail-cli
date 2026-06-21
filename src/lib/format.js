@@ -225,7 +225,8 @@ export function formatWhoami(r) {
 }
 
 export function formatDraft(r) {
-  return `draft ${r.action === 'draft-created' ? 'created' : r.action} (uid ${r.uid}) → ${(r.to || []).join(', ')} · ${r.subject}`;
+  const verb = { 'draft-created': 'created', 'draft-deleted': 'deleted', 'draft-sent': 'sent' }[r.action] || r.action;
+  return `draft ${verb} (uid ${r.uid}) → ${(r.to || []).join(', ')} · ${r.subject}`;
 }
 
 export function formatDryRun(r) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addLabel, removeLabel, markMessage, appendDraft } from '../src/writer.js';
+import { addLabel, removeLabel, markMessage, appendDraft, fetchRawMessage } from '../src/writer.js';
 
 // ---------------------------------------------------------------------------
 // Fake imapflow client for write operations
@@ -193,4 +193,49 @@ it('appendDraft APPENDs to [Gmail]/Drafts with \\Draft and returns uid', async (
   expect(calls[0][0]).toBe('[Gmail]/Drafts');
   expect(calls[0][1]).toEqual(['\\Draft']);
   expect(r).toEqual({ uid: 42, mailbox: '[Gmail]/Drafts' });
+});
+
+// ---------------------------------------------------------------------------
+// fetchRawMessage
+// ---------------------------------------------------------------------------
+
+describe('fetchRawMessage', () => {
+  it('opens the mailbox and returns the source Buffer from the first fetch result', async () => {
+    const rawBuf = Buffer.from('raw RFC822 message');
+    const openedMailboxes = [];
+    const client = {
+      async mailboxOpen(mbox) { openedMailboxes.push(mbox); },
+      async *fetch(_uid, _query, _opts) {
+        yield { source: rawBuf };
+      },
+    };
+    const result = await fetchRawMessage(client, { uid: '42', mailbox: '[Gmail]/Drafts' });
+    expect(openedMailboxes).toEqual(['[Gmail]/Drafts']);
+    expect(result).toBe(rawBuf);
+  });
+
+  it('returns null when no messages are found (empty fetch result)', async () => {
+    const client = {
+      async mailboxOpen() {},
+      async *fetch() { /* yields nothing — intentionally empty */ },
+    };
+    const result = await fetchRawMessage(client, { uid: '99', mailbox: '[Gmail]/Drafts' });
+    expect(result).toBeNull();
+  });
+
+  it('calls fetch with the uid as a Number', async () => {
+    const fetchCalls = [];
+    const rawBuf = Buffer.from('data');
+    const client = {
+      async mailboxOpen() {},
+      async *fetch(_uid, _query, _opts) {
+        fetchCalls.push({ uid: _uid, query: _query, opts: _opts });
+        yield { source: rawBuf };
+      },
+    };
+    await fetchRawMessage(client, { uid: '7', mailbox: '[Gmail]/Drafts' });
+    expect(fetchCalls[0].uid).toBe(7);
+    expect(fetchCalls[0].query).toMatchObject({ source: true });
+    expect(fetchCalls[0].opts).toMatchObject({ uid: true });
+  });
 });

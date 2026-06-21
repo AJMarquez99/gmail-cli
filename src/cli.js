@@ -16,7 +16,7 @@ import { runReadList, runReadSearch, runReadShow, runReadThread } from './comman
 import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
 import { runMark } from './commands/mark.js';
 import { runWhoami } from './commands/whoami.js';
-import { runDraftCreate, runDraftDelete } from './commands/draft.js';
+import { runDraftCreate, runDraftDelete, runDraftSend } from './commands/draft.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -295,6 +295,12 @@ export function buildProgram(deps = defaultDeps) {
     .command('delete <uid>')
     .description('Discard a draft by UID')
     .action(handle(runDraftDelete, { table: formatDraft, args: ['uid'] }, deps));
+  draft
+    .command('send <uid>')
+    .description('Send a draft by UID (enforces the allowlist; transmits, then deletes the draft)')
+    .option('--no-allowlist', 'disable the recipient allowlist for this send')
+    .option('--no-log', 'do not append this send to the send log')
+    .action(handle(runDraftSend, { table: formatDraft, args: ['uid'] }, deps));
 
   return program;
 }

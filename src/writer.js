@@ -1,5 +1,14 @@
 export const DRAFTS = '[Gmail]/Drafts';
 
+/** Fetch the raw RFC822 source of a message by UID from a mailbox. Returns a Buffer, or null. */
+export async function fetchRawMessage(client, { uid, mailbox }) {
+  await client.mailboxOpen(mailbox);
+  for await (const msg of client.fetch(Number(uid), { uid: true, source: true }, { uid: true })) {
+    return msg.source;
+  }
+  return null;
+}
+
 /** APPEND a raw RFC822 message to the Drafts mailbox with the \Draft flag. */
 export async function appendDraft(client, raw) {
   const res = await client.append(DRAFTS, raw, ['\\Draft']);

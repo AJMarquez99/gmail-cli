@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { runDraftCreate } from '../src/commands/draft.js';
 import { buildProgram } from '../src/cli.js';
 import { resolveCapabilities } from '../src/capabilities.js';
+import { RecipientNotAllowedError } from '../src/lib/errors.js';
 
 // ---------------------------------------------------------------------------
 // Fake client + deps builder (mirrors read.test.js / mark.test.js pattern)
@@ -189,5 +190,178 @@ describe('CLI integration — draft create', () => {
     }
     expect(deps._client._appendCalls).toHaveLength(1);
     expect(deps._client._appendCalls[0].mbox).toBe('[Gmail]/Drafts');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runDraftSend
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal deps object for runDraftSend tests.
+ * Mirrors the pattern from test/send.test.js (createTransport, loadAllowlist,
+ * resolveCredentials, resolveProfile, appendLog, now) plus the IMAP client
+ * stub from the runDraftDelete test above (createImapClient, mailboxOpen,
+ * messageDelete, fetch).
+ */
+function makeDraftSendDeps({
+  rawSource = Buffer.from(
+    'From: me@example.com\r\nTo: a@x.com\r\nSubject: Test Draft\r\n\r\nHello',
+  ),
+  parsedMessage = {
+    subject: 'Test Draft',
+    to: { value: [{ address: 'a@x.com' }] },
+    cc: null,
+    bcc: null,
+  },
+  allowlist = { recipients: [{ email: 'a@x.com' }] },
+  allowlistEnforce = true,
+  sendMailResult = { messageId: '<mid@gmail>', accepted: ['a@x.com'] },
+} = {}) {
+  const mailboxOpenCalls = [];
+  const messageDeleteCalls = [];
+  const fetchCalls = [];
+
+  // The same fake client is used for BOTH the fetch AND delete withClient calls.
+  const client = {
+    connected: false,
+    loggedOut: false,
+    _mailboxOpenCalls: mailboxOpenCalls,
+    _messageDeleteCalls: messageDeleteCalls,
+    _fetchCalls: fetchCalls,
+
+    async connect() { this.connected = true; },
+    async logout() { this.loggedOut = true; },
+
+    async mailboxOpen(mbox) {
+      mailboxOpenCalls.push(mbox);
+    },
+
+    async messageDelete(uid, opts) {
+      messageDeleteCalls.push({ uid, opts });
+    },
+
+    // imapflow fetch() is an async generator; return an iterable that yields rawSource.
+    async *fetch(uid, query, options) {
+      fetchCalls.push({ uid, query, options });
+      yield { source: rawSource };
+    },
+  };
+
+  const sendMailMock = vi.fn(async () => sendMailResult);
+  const transporter = { sendMail: sendMailMock };
+
+  return {
+    resolveProfile: vi.fn(() => ({
+      name: '(default)',
+      legacy: true,
+      credentialsPath: '/credentials.json',
+      imap: {},
+      fromName: null,
+      replyTo: null,
+      signature: null,
+      allowlistPath: '/allowlist.json',
+      allowlistEnforce,
+      sendLog: { enabled: true },
+      sendLogPath: '/sent.jsonl',
+      capabilities: resolveCapabilities({}),
+    })),
+    resolveCredentials: vi.fn(() => ({ user: 'me@example.com', appPassword: 'pw' })),
+    createImapClient: vi.fn(() => client),
+    loadAllowlist: vi.fn(() => allowlist),
+    createTransport: vi.fn(() => transporter),
+    parseMessage: vi.fn(async () => parsedMessage),
+    appendLog: vi.fn(),
+    now: vi.fn(() => '2026-01-01T00:00:00.000Z'),
+    _client: client,
+    _sendMail: sendMailMock,
+  };
+}
+
+describe('runDraftSend', () => {
+  it('happy path: fetches draft, enforces allowlist, calls sendMail with raw+envelope, deletes draft, appends log', async () => {
+    const { runDraftSend } = await import('../src/commands/draft.js');
+    const deps = makeDraftSendDeps();
+
+    const result = await runDraftSend({ uid: '5' }, deps);
+
+    // sendMail called with { raw, envelope } where envelope.to contains a@x.com
+    expect(deps._sendMail).toHaveBeenCalledOnce();
+    const sendArg = deps._sendMail.mock.calls[0][0];
+    expect(sendArg).toHaveProperty('raw');
+    expect(sendArg).toHaveProperty('envelope');
+    expect(sendArg.envelope.to).toContain('a@x.com');
+    expect(sendArg.envelope.from).toBe('me@example.com');
+
+    // draft was deleted (messageDelete called)
+    expect(deps._client._messageDeleteCalls).toHaveLength(1);
+    expect(deps._client._messageDeleteCalls[0].uid).toBe(5);
+
+    // send-log appended
+    expect(deps.appendLog).toHaveBeenCalledOnce();
+    expect(deps.appendLog.mock.calls[0][0]).toMatchObject({
+      ts: '2026-01-01T00:00:00.000Z',
+      subject: 'Test Draft',
+      messageId: '<mid@gmail>',
+    });
+
+    // return value shape
+    expect(result.action).toBe('draft-sent');
+    expect(result.uid).toBe(5);
+    expect(result.to).toContain('a@x.com');
+    expect(result.subject).toBe('Test Draft');
+    expect(result.messageId).toBe('<mid@gmail>');
+  });
+
+  it('denial: allowlist blocks recipient → throws RecipientNotAllowedError, sendMail NOT called, draft intact (deleteMessage NOT called)', async () => {
+    const { runDraftSend } = await import('../src/commands/draft.js');
+    // blocked@evil.com is NOT in the allowlist
+    const deps = makeDraftSendDeps({
+      rawSource: Buffer.from(
+        'From: me@example.com\r\nTo: blocked@evil.com\r\nSubject: Blocked\r\n\r\nHi',
+      ),
+      parsedMessage: {
+        subject: 'Blocked',
+        to: { value: [{ address: 'blocked@evil.com' }] },
+        cc: null,
+        bcc: null,
+      },
+      allowlist: { recipients: [] }, // nobody allowed except self
+      allowlistEnforce: true,
+    });
+
+    await expect(runDraftSend({ uid: '7' }, deps)).rejects.toThrow(RecipientNotAllowedError);
+
+    // CRITICAL: sendMail must NOT have been called (no transmission)
+    expect(deps._sendMail).not.toHaveBeenCalled();
+
+    // CRITICAL: deleteMessage must NOT have been called (draft intact)
+    expect(deps._client._messageDeleteCalls).toHaveLength(0);
+  });
+
+  it('warns on stderr on a real send when enforcement is off (mirrors send.js)', async () => {
+    const { runDraftSend } = await import('../src/commands/draft.js');
+    const deps = makeDraftSendDeps({ allowlistEnforce: false });
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runDraftSend({ uid: '5' }, deps);
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('allowlist enforcement disabled'));
+      expect(deps._sendMail).toHaveBeenCalledOnce();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('does NOT warn on stderr on a real send when enforcement is on', async () => {
+    const { runDraftSend } = await import('../src/commands/draft.js');
+    const deps = makeDraftSendDeps();
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runDraftSend({ uid: '5' }, deps);
+      const warned = spy.mock.calls.some(([arg]) => String(arg).includes('allowlist enforcement disabled'));
+      expect(warned).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
