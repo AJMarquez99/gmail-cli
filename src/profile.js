@@ -3,6 +3,7 @@ import { resolveConfigPath } from './auth/credentials.js';
 import { resolveAllowlistPath } from './allowlist.js';
 import { resolveSendLogPath } from './lib/sendlog.js';
 import { InvalidInputError } from './lib/errors.js';
+import { resolveCapabilities } from './capabilities.js';
 
 const expand = (p, home) => (p && p.startsWith('~') ? join(home, p.slice(1)) : p);
 
@@ -22,6 +23,7 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
       signature: config.signature || null,
       allowlistEnforce: config.allowlist ? config.allowlist.enforce !== false : true,
       sendLog: config.sendLog || {},
+      capabilities: resolveCapabilities(config),
       legacy: true,
     };
   }
@@ -48,6 +50,7 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
     signature: p.signature || null,
     allowlistEnforce: p.allowlist ? p.allowlist.enforce !== false : true,
     sendLog: p.sendLog || {},
+    capabilities: resolveCapabilities(p),
     legacy: false,
   };
 }

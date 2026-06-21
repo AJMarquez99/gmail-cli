@@ -85,3 +85,23 @@ describe('resolveProfile — sole profile & ambiguity', () => {
     expect(() => resolveProfile({ env: ENV, config, name: undefined })).toThrow(/--profile/);
   });
 });
+
+describe('resolveProfile — capabilities', () => {
+  it('legacy: unrestricted when no capability keys', () => {
+    const p = resolveProfile({ env: ENV, config: {}, name: undefined });
+    expect(p.capabilities.mode).toBe('unrestricted');
+    expect(p.capabilities.allowed.has('send')).toBe(true);
+  });
+  it('legacy: reads top-level capabilities', () => {
+    const p = resolveProfile({ env: ENV, config: { capabilities: ['read'] }, name: undefined });
+    expect(p.capabilities.mode).toBe('allow');
+    expect(p.capabilities.allowed.has('read')).toBe(true);
+    expect(p.capabilities.allowed.has('send')).toBe(false);
+  });
+  it('profile mode: reads the profile\'s capabilities/deny', () => {
+    const config = { profiles: { biz: { capabilities: ['read', 'organize', 'draft'] } } };
+    const p = resolveProfile({ env: ENV, config, name: 'biz' });
+    expect(p.capabilities.allowed.has('draft')).toBe(true);
+    expect(p.capabilities.allowed.has('send')).toBe(false);
+  });
+});
