@@ -1,5 +1,5 @@
 import { withClient } from './read.js';
-import * as reader from '../reader.js';
+import { markMessage } from '../writer.js';
 import { InvalidInputError } from '../lib/errors.js';
 
 /**
@@ -21,6 +21,6 @@ export async function runMark(opts, deps) {
   }
   const seen = !!opts.read;
   return withClient(opts, deps, async (client) =>
-    reader.markMessage(client, { uid: opts.uid, seen, mailbox: opts.mailbox }),
+    markMessage(client, { uid: opts.uid, seen, mailbox: opts.mailbox }),
   );
 }

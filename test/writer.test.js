@@ -1,0 +1,183 @@
+import { describe, it, expect } from 'vitest';
+import { addLabel, removeLabel, markMessage } from '../src/writer.js';
+
+// ---------------------------------------------------------------------------
+// Fake imapflow client for write operations
+// ---------------------------------------------------------------------------
+
+function fakeWriteClient({ throwInOp = false } = {}) {
+  return {
+    opened: null,
+    _flagsAddCalls: [],
+    _flagsRemoveCalls: [],
+
+    async mailboxOpen(path) {
+      this.opened = path;
+      return { exists: 1 };
+    },
+
+    async messageFlagsAdd(uid, flags, opts) {
+      if (throwInOp) throw new Error('flagsAdd exploded');
+      this._flagsAddCalls.push({ uid, flags, opts });
+    },
+
+    async messageFlagsRemove(uid, flags, opts) {
+      if (throwInOp) throw new Error('flagsRemove exploded');
+      this._flagsRemoveCalls.push({ uid, flags, opts });
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// addLabel
+// ---------------------------------------------------------------------------
+
+describe('addLabel', () => {
+  it('opens the specified mailbox', async () => {
+    const client = fakeWriteClient();
+    await addLabel(client, { uid: '1', label: 'work', mailbox: 'INBOX' });
+    expect(client.opened).toBe('INBOX');
+  });
+
+  it('defaults to INBOX when no mailbox provided', async () => {
+    const client = fakeWriteClient();
+    await addLabel(client, { uid: '1', label: 'work' });
+    expect(client.opened).toBe('INBOX');
+  });
+
+  it('calls messageFlagsAdd with correct uid, label, and useLabels:true', async () => {
+    const client = fakeWriteClient();
+    await addLabel(client, { uid: '42', label: 'work', mailbox: 'INBOX' });
+    const call = client._flagsAddCalls[0];
+    expect(call.uid).toBe(42);
+    expect(call.flags).toEqual(['work']);
+    expect(call.opts).toMatchObject({ uid: true, useLabels: true });
+  });
+
+  it('coerces uid to a number', async () => {
+    const client = fakeWriteClient();
+    await addLabel(client, { uid: '7', label: 'tag', mailbox: 'INBOX' });
+    expect(client._flagsAddCalls[0].uid).toBe(7);
+  });
+
+  it('returns { uid, label, action: "added" }', async () => {
+    const client = fakeWriteClient();
+    const result = await addLabel(client, { uid: '42', label: 'work', mailbox: 'INBOX' });
+    expect(result).toEqual({ uid: 42, label: 'work', action: 'added' });
+  });
+
+  it('propagates errors from messageFlagsAdd', async () => {
+    const client = fakeWriteClient({ throwInOp: true });
+    await expect(addLabel(client, { uid: '1', label: 'tag', mailbox: 'INBOX' })).rejects.toThrow('flagsAdd exploded');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeLabel
+// ---------------------------------------------------------------------------
+
+describe('removeLabel', () => {
+  it('opens the specified mailbox', async () => {
+    const client = fakeWriteClient();
+    await removeLabel(client, { uid: '1', label: 'work', mailbox: 'INBOX' });
+    expect(client.opened).toBe('INBOX');
+  });
+
+  it('defaults to INBOX when no mailbox provided', async () => {
+    const client = fakeWriteClient();
+    await removeLabel(client, { uid: '1', label: 'work' });
+    expect(client.opened).toBe('INBOX');
+  });
+
+  it('calls messageFlagsRemove with correct uid, label, and useLabels:true', async () => {
+    const client = fakeWriteClient();
+    await removeLabel(client, { uid: '99', label: 'work', mailbox: 'INBOX' });
+    const call = client._flagsRemoveCalls[0];
+    expect(call.uid).toBe(99);
+    expect(call.flags).toEqual(['work']);
+    expect(call.opts).toMatchObject({ uid: true, useLabels: true });
+  });
+
+  it('coerces uid to a number', async () => {
+    const client = fakeWriteClient();
+    await removeLabel(client, { uid: '5', label: 'tag', mailbox: 'INBOX' });
+    expect(client._flagsRemoveCalls[0].uid).toBe(5);
+  });
+
+  it('returns { uid, label, action: "removed" }', async () => {
+    const client = fakeWriteClient();
+    const result = await removeLabel(client, { uid: '99', label: 'work', mailbox: 'INBOX' });
+    expect(result).toEqual({ uid: 99, label: 'work', action: 'removed' });
+  });
+
+  it('propagates errors from messageFlagsRemove', async () => {
+    const client = fakeWriteClient({ throwInOp: true });
+    await expect(removeLabel(client, { uid: '1', label: 'tag', mailbox: 'INBOX' })).rejects.toThrow('flagsRemove exploded');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// markMessage
+// ---------------------------------------------------------------------------
+
+describe('markMessage', () => {
+  it('opens the specified mailbox', async () => {
+    const client = fakeWriteClient();
+    await markMessage(client, { uid: '1', seen: true, mailbox: 'INBOX' });
+    expect(client.opened).toBe('INBOX');
+  });
+
+  it('defaults to INBOX when no mailbox provided', async () => {
+    const client = fakeWriteClient();
+    await markMessage(client, { uid: '1', seen: true });
+    expect(client.opened).toBe('INBOX');
+  });
+
+  it('calls messageFlagsAdd with ["\\\\Seen"] when seen is true (no useLabels)', async () => {
+    const client = fakeWriteClient();
+    await markMessage(client, { uid: '42', seen: true, mailbox: 'INBOX' });
+    const call = client._flagsAddCalls[0];
+    expect(call.uid).toBe(42);
+    expect(call.flags).toEqual(['\\Seen']);
+    expect(call.opts).toMatchObject({ uid: true });
+    expect(call.opts.useLabels).toBeFalsy();
+  });
+
+  it('calls messageFlagsRemove with ["\\\\Seen"] when seen is false (no useLabels)', async () => {
+    const client = fakeWriteClient();
+    await markMessage(client, { uid: '99', seen: false, mailbox: 'INBOX' });
+    const call = client._flagsRemoveCalls[0];
+    expect(call.uid).toBe(99);
+    expect(call.flags).toEqual(['\\Seen']);
+    expect(call.opts).toMatchObject({ uid: true });
+    expect(call.opts.useLabels).toBeFalsy();
+  });
+
+  it('coerces uid to a number', async () => {
+    const client = fakeWriteClient();
+    await markMessage(client, { uid: '7', seen: true, mailbox: 'INBOX' });
+    expect(client._flagsAddCalls[0].uid).toBe(7);
+  });
+
+  it('returns { uid, seen: true, action: "read" } when marking read', async () => {
+    const client = fakeWriteClient();
+    const result = await markMessage(client, { uid: '42', seen: true, mailbox: 'INBOX' });
+    expect(result).toEqual({ uid: 42, seen: true, action: 'read' });
+  });
+
+  it('returns { uid, seen: false, action: "unread" } when marking unread', async () => {
+    const client = fakeWriteClient();
+    const result = await markMessage(client, { uid: '99', seen: false, mailbox: 'INBOX' });
+    expect(result).toEqual({ uid: 99, seen: false, action: 'unread' });
+  });
+
+  it('propagates errors from messageFlagsAdd', async () => {
+    const client = fakeWriteClient({ throwInOp: true });
+    await expect(markMessage(client, { uid: '1', seen: true, mailbox: 'INBOX' })).rejects.toThrow('flagsAdd exploded');
+  });
+
+  it('propagates errors from messageFlagsRemove', async () => {
+    const client = fakeWriteClient({ throwInOp: true });
+    await expect(markMessage(client, { uid: '1', seen: false, mailbox: 'INBOX' })).rejects.toThrow('flagsRemove exploded');
+  });
+});

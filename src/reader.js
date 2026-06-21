@@ -157,55 +157,6 @@ export async function getThread(client, { threadId, mailbox = '[Gmail]/All Mail'
 }
 
 /**
- * Add a Gmail label to a message via X-GM-LABELS.
- *
- * @param {object} client   Connected imapflow client.
- * @param {object} [opts]
- * @param {number|string} [opts.uid]      Message UID.
- * @param {string} [opts.label]           Label/mailbox path to add.
- * @param {string} [opts.mailbox='INBOX']
- * @returns {Promise<{uid:number, label:string, action:'added'}>}
- */
-export async function addLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
-  await client.mailboxOpen(mailbox);
-  await client.messageFlagsAdd(Number(uid), [label], { uid: true, useLabels: true });
-  return { uid: Number(uid), label, action: 'added' };
-}
-
-/**
- * Remove a Gmail label from a message via X-GM-LABELS.
- *
- * @param {object} client   Connected imapflow client.
- * @param {object} [opts]
- * @param {number|string} [opts.uid]      Message UID.
- * @param {string} [opts.label]           Label/mailbox path to remove.
- * @param {string} [opts.mailbox='INBOX']
- * @returns {Promise<{uid:number, label:string, action:'removed'}>}
- */
-export async function removeLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
-  await client.mailboxOpen(mailbox);
-  await client.messageFlagsRemove(Number(uid), [label], { uid: true, useLabels: true });
-  return { uid: Number(uid), label, action: 'removed' };
-}
-
-/**
- * Mark a message as read or unread by toggling the \Seen IMAP flag.
- *
- * @param {object} client   Connected imapflow client.
- * @param {object} [opts]
- * @param {number|string} [opts.uid]      Message UID.
- * @param {boolean} [opts.seen]           true → mark read, false → mark unread.
- * @param {string} [opts.mailbox='INBOX']
- * @returns {Promise<{uid:number, seen:boolean, action:'read'|'unread'}>}
- */
-export async function markMessage(client, { uid, seen, mailbox = 'INBOX' } = {}) {
-  await client.mailboxOpen(mailbox);
-  if (seen) await client.messageFlagsAdd(Number(uid), ['\\Seen'], { uid: true });
-  else await client.messageFlagsRemove(Number(uid), ['\\Seen'], { uid: true });
-  return { uid: Number(uid), seen, action: seen ? 'read' : 'unread' };
-}
-
-/**
  * List all IMAP mailboxes / Gmail labels.
  *
  * @param {object} client
