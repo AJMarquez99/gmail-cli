@@ -526,7 +526,7 @@ gmail delete 17 --permanent    # refuses without --permanent; points you to `tra
 ```
 
 `mark` requires exactly one action flag. `archive`/`move`/`mark`/`label create|delete|rename` need
-the `organize` capability; `trash`/`delete` need `delete`. **Permanent `delete` always requires
+the `organize` capability; `trash`/`delete` need `delete`; `read count`/`read download` need `read`. **Permanent `delete` always requires
 `--permanent`** on top of the `delete` capability — there is no interactive confirmation (it would
 not fit the JSON/agentic model), so `--permanent` is the explicit intent guard.
 
@@ -548,7 +548,7 @@ not fit the JSON/agentic model), so `--permanent` is the explicit intent guard.
 | `gmail read show <uid\|message-id>` | Show a full message by UID or Message-ID. Options: `--mailbox`. (HTML body is in the `html` field of `--format json` output.) |
 | `gmail read thread <thread-id>` | Show all messages in a thread (oldest first). Options: `--mailbox`. |
 | `gmail read count` | Count total + unread messages in a mailbox. Options: `--mailbox`. |
-| `gmail read download <uid>` | Download a message's attachments to a directory. Options: `--mailbox`, `--dir`. |
+| `gmail read download <target>` | Download a message's attachments to a directory. Options: `--mailbox`, `--dir`. |
 | `gmail archive <uid>` | Archive a message (remove it from the inbox). Options: `--mailbox`. |
 | `gmail move <uid> <destination>` | Move a message to another mailbox/label. Options: `--mailbox`. |
 | `gmail trash <uid>` | Move a message to Trash (recoverable). Options: `--mailbox`. |
