@@ -170,3 +170,9 @@ export async function listLabels(client) {
     specialUse: b.specialUse || null,
   }));
 }
+
+/** Count total + unread messages in a mailbox via IMAP STATUS. */
+export async function countMessages(client, { mailbox = 'INBOX' } = {}) {
+  const st = await client.status(mailbox, { messages: true, unseen: true });
+  return { mailbox, total: st.messages, unread: st.unseen };
+}

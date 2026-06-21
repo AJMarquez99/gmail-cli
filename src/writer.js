@@ -70,3 +70,60 @@ export async function markMessage(client, { uid, seen, mailbox = 'INBOX' } = {})
   else await client.messageFlagsRemove(Number(uid), ['\\Seen'], { uid: true });
   return { uid: Number(uid), seen, action: seen ? 'read' : 'unread' };
 }
+
+export const TRASH = '[Gmail]/Trash';
+
+/** Archive: remove the Gmail \Inbox system label via X-GM-LABELS. */
+export async function archiveMessage(client, { uid, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  await client.messageFlagsRemove(Number(uid), ['\\Inbox'], { uid: true, useLabels: true });
+  return { uid: Number(uid), mailbox, action: 'archived' };
+}
+
+/** Move a message to a destination mailbox/label. */
+export async function moveMessage(client, { uid, mailbox = 'INBOX', destination } = {}) {
+  await client.mailboxOpen(mailbox);
+  await client.messageMove(Number(uid), destination, { uid: true });
+  return { uid: Number(uid), from: mailbox, to: destination, action: 'moved' };
+}
+
+/** Move a message to Trash (recoverable). */
+export async function trashMessage(client, { uid, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  await client.messageMove(Number(uid), TRASH, { uid: true });
+  return { uid: Number(uid), action: 'trashed' };
+}
+
+/** Toggle the Gmail \Starred label. */
+export async function starMessage(client, { uid, on, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  const fn = on ? 'messageFlagsAdd' : 'messageFlagsRemove';
+  await client[fn](Number(uid), ['\\Starred'], { uid: true, useLabels: true });
+  return { uid: Number(uid), starred: !!on, action: on ? 'starred' : 'unstarred' };
+}
+
+/** Toggle the Gmail \Important label. */
+export async function importantMessage(client, { uid, on, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  const fn = on ? 'messageFlagsAdd' : 'messageFlagsRemove';
+  await client[fn](Number(uid), ['\\Important'], { uid: true, useLabels: true });
+  return { uid: Number(uid), important: !!on, action: on ? 'marked-important' : 'unmarked-important' };
+}
+
+/** Create a Gmail label (IMAP mailbox). */
+export async function createLabel(client, { name } = {}) {
+  await client.mailboxCreate(name);
+  return { name, action: 'created' };
+}
+
+/** Delete a Gmail label (IMAP mailbox). */
+export async function deleteLabel(client, { name } = {}) {
+  await client.mailboxDelete(name);
+  return { name, action: 'deleted' };
+}
+
+/** Rename a Gmail label (IMAP mailbox). */
+export async function renameLabel(client, { name, newName } = {}) {
+  await client.mailboxRename(name, newName);
+  return { from: name, to: newName, action: 'renamed' };
+}

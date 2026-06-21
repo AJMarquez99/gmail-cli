@@ -239,3 +239,62 @@ describe('fetchRawMessage', () => {
     expect(fetchCalls[0].opts).toMatchObject({ uid: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// IMAP organize primitives
+// ---------------------------------------------------------------------------
+
+import { archiveMessage, moveMessage, trashMessage, starMessage, importantMessage,
+  createLabel, deleteLabel, renameLabel, TRASH } from '../src/writer.js';
+
+const mkClient = () => {
+  const calls = [];
+  return { calls,
+    mailboxOpen: async (m) => calls.push(['open', m]),
+    messageFlagsAdd: async (u, f, o) => calls.push(['add', Number(u), f, o]),
+    messageFlagsRemove: async (u, f, o) => calls.push(['remove', Number(u), f, o]),
+    messageMove: async (u, d, o) => calls.push(['move', Number(u), d, o]),
+    mailboxCreate: async (p) => calls.push(['create', p]),
+    mailboxDelete: async (p) => calls.push(['delete', p]),
+    mailboxRename: async (a, b) => calls.push(['rename', a, b]),
+  };
+};
+
+it('archiveMessage removes the \\Inbox label via X-GM-LABELS', async () => {
+  const c = mkClient();
+  const r = await archiveMessage(c, { uid: '7', mailbox: 'INBOX' });
+  expect(c.calls).toContainEqual(['remove', 7, ['\\Inbox'], { uid: true, useLabels: true }]);
+  expect(r).toEqual({ uid: 7, mailbox: 'INBOX', action: 'archived' });
+});
+it('moveMessage moves a uid to a destination mailbox', async () => {
+  const c = mkClient();
+  const r = await moveMessage(c, { uid: '7', mailbox: 'INBOX', destination: 'Saved' });
+  expect(c.calls).toContainEqual(['move', 7, 'Saved', { uid: true }]);
+  expect(r).toEqual({ uid: 7, from: 'INBOX', to: 'Saved', action: 'moved' });
+});
+it('trashMessage moves to the Trash mailbox', async () => {
+  const c = mkClient();
+  const r = await trashMessage(c, { uid: '7', mailbox: 'INBOX' });
+  expect(c.calls).toContainEqual(['move', 7, TRASH, { uid: true }]);
+  expect(r).toEqual({ uid: 7, action: 'trashed' });
+});
+it('starMessage adds \\Starred when on, removes when off', async () => {
+  const c = mkClient();
+  await starMessage(c, { uid: '7', on: true, mailbox: 'INBOX' });
+  expect(c.calls).toContainEqual(['add', 7, ['\\Starred'], { uid: true, useLabels: true }]);
+  const c2 = mkClient();
+  await starMessage(c2, { uid: '7', on: false, mailbox: 'INBOX' });
+  expect(c2.calls).toContainEqual(['remove', 7, ['\\Starred'], { uid: true, useLabels: true }]);
+});
+it('importantMessage toggles \\Important', async () => {
+  const c = mkClient();
+  await importantMessage(c, { uid: '7', on: true, mailbox: 'INBOX' });
+  expect(c.calls).toContainEqual(['add', 7, ['\\Important'], { uid: true, useLabels: true }]);
+});
+it('createLabel/deleteLabel/renameLabel call the mailbox ops', async () => {
+  const c = mkClient();
+  expect(await createLabel(c, { name: 'X' })).toEqual({ name: 'X', action: 'created' });
+  expect(await deleteLabel(c, { name: 'X' })).toEqual({ name: 'X', action: 'deleted' });
+  expect(await renameLabel(c, { name: 'X', newName: 'Y' })).toEqual({ from: 'X', to: 'Y', action: 'renamed' });
+  expect(c.calls).toEqual([['create', 'X'], ['delete', 'X'], ['rename', 'X', 'Y']]);
+});
