@@ -13,15 +13,19 @@ export function formatSend(result) {
 }
 
 export function formatDoctor(result) {
+  const capList = result.capabilities && result.capabilities.length
+    ? result.capabilities.join(', ')
+    : '(none)';
   const lines = [
-    `status:      ${result.ok ? 'ok' : 'FAILED'}`,
-    `profile:     ${result.profile || '(default)'}`,
-    `account:     ${result.user || '(none)'}`,
-    `source:      ${result.source || '(none)'}`,
-    `credentials: ${result.credentials}`,
-    `smtp:        ${result.smtp}`,
-    `imap:        ${result.imap}`,
-    `allowlist:   ${result.allowlist} recipient(s) — ${result.allowlistEnforced ? 'enforced' : 'DISABLED'}`,
+    `status:       ${result.ok ? 'ok' : 'FAILED'}`,
+    `profile:      ${result.profile || '(default)'}`,
+    `account:      ${result.user || '(none)'}`,
+    `source:       ${result.source || '(none)'}`,
+    `credentials:  ${result.credentials}`,
+    `smtp:         ${result.smtp}`,
+    `imap:         ${result.imap}`,
+    `allowlist:    ${result.allowlist} recipient(s) — ${result.allowlistEnforced ? 'enforced' : 'DISABLED'}`,
+    `capabilities: ${result.mode || 'unrestricted'} → ${capList}`,
   ];
   if (result.error) lines.push('', result.error);
   return lines.join('\n');
