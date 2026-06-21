@@ -469,4 +469,34 @@ describe('runForward', () => {
 
     expect(deps._sendMail).not.toHaveBeenCalled();
   });
+
+  it('expands an aliased --to to its real email before sending', async () => {
+    const deps = makeDeps({
+      allowlist: { recipients: [{ email: 'bob@example.com', aliases: ['bob'] }] },
+      sendMailResult: { messageId: '<fwd-alias@gmail>', accepted: ['bob@example.com'] },
+    });
+
+    await runForward({ uid: '5', to: ['bob'], mailbox: 'INBOX' }, deps);
+
+    expect(deps._sendMail).toHaveBeenCalledOnce();
+    const arg = deps._sendMail.mock.calls[0][0];
+    // alias must be expanded — the message must NOT contain the raw alias 'bob'
+    expect(arg.to).not.toContain('bob');
+    expect(arg.to).toContain('bob@example.com');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runReply — send path: resolved recipients in message
+// ---------------------------------------------------------------------------
+
+describe('runReply — send path uses resolved recipients', () => {
+  it('sends message with the allowlist-resolved to address', async () => {
+    const deps = makeDeps();
+    await runReply({ uid: '10', mailbox: 'INBOX', body: 'reply' }, deps);
+
+    const arg = deps._sendMail.mock.calls[0][0];
+    // recipient from original From header, must be a proper email not undefined
+    expect(arg.to).toContain('alice@x.com');
+  });
 });
