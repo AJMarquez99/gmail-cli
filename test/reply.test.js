@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runReply } from '../src/commands/reply.js';
+import { runReply, runForward } from '../src/commands/reply.js';
 import { resolveCapabilities } from '../src/capabilities.js';
-import { RecipientNotAllowedError } from '../src/lib/errors.js';
+import { RecipientNotAllowedError, InvalidInputError } from '../src/lib/errors.js';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -342,5 +342,82 @@ describe('runReply — References threading', () => {
     await runReply({ uid: '10', mailbox: 'INBOX', body: 'arr refs' }, deps);
     const arg = deps._sendMail.mock.calls[0][0];
     expect(arg.references).toContain('<m1>');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runForward
+// ---------------------------------------------------------------------------
+
+const PARSED_WITH_ATTACHMENT = {
+  ...PARSED_ORIG,
+  attachments: [
+    { filename: 'a.pdf', content: Buffer.from('xx'), contentType: 'application/pdf' },
+  ],
+};
+
+describe('runForward', () => {
+  it('re-attaches original attachments, uses Fwd: subject, sends to --to', async () => {
+    const deps = makeDeps({
+      parsedMessage: PARSED_WITH_ATTACHMENT,
+      allowlist: { recipients: [{ email: 'bob@x.com' }] },
+      sendMailResult: { messageId: '<fwd-id@gmail>', accepted: ['bob@x.com'] },
+    });
+
+    const result = await runForward({ uid: '7', to: ['bob@x.com'], mailbox: 'INBOX' }, deps);
+
+    expect(deps._sendMail).toHaveBeenCalledOnce();
+    const arg = deps._sendMail.mock.calls[0][0];
+
+    // subject prefixed with Fwd:
+    expect(arg.subject).toBe('Fwd: Hello');
+
+    // to contains the forwarded recipient
+    expect(arg.to).toContain('bob@x.com');
+
+    // body contains original text
+    const body = arg.text || '';
+    expect(body).toContain('orig body');
+
+    // re-attached as content buffers
+    const atts = arg.attachments || [];
+    expect(atts.some((a) => a.filename === 'a.pdf' && Buffer.isBuffer(a.content))).toBe(true);
+
+    // result shape
+    expect(result.action).toBe('forwarded');
+    expect(result.attachments).toContain('a.pdf');
+  });
+
+  it('does not double-prefix Fwd: if subject already starts with Fwd:', async () => {
+    const parsedFwd = { ...PARSED_ORIG, subject: 'Fwd: Hello' };
+    const deps = makeDeps({
+      parsedMessage: parsedFwd,
+      allowlist: { recipients: [{ email: 'bob@x.com' }] },
+    });
+    await runForward({ uid: '7', to: ['bob@x.com'], mailbox: 'INBOX' }, deps);
+    const arg = deps._sendMail.mock.calls[0][0];
+    expect(arg.subject).toBe('Fwd: Hello');
+  });
+
+  it('missing --to → InvalidInputError; sendMail NOT called', async () => {
+    const deps = makeDeps();
+
+    await expect(
+      runForward({ uid: '7', to: [], mailbox: 'INBOX' }, deps),
+    ).rejects.toThrow(InvalidInputError);
+
+    expect(deps._sendMail).not.toHaveBeenCalled();
+  });
+
+  it('allowlist-blocked recipient → RecipientNotAllowedError; sendMail NOT called', async () => {
+    const deps = makeDeps({
+      allowlist: { recipients: [] }, // nobody allowed
+    });
+
+    await expect(
+      runForward({ uid: '7', to: ['blocked@evil.com'], mailbox: 'INBOX' }, deps),
+    ).rejects.toThrow(RecipientNotAllowedError);
+
+    expect(deps._sendMail).not.toHaveBeenCalled();
   });
 });

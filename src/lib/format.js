@@ -251,6 +251,10 @@ export function formatReply(r) {
   return `${verb} → ${(r.to || []).join(', ')}${r.cc && r.cc.length ? ' (cc ' + r.cc.join(', ') + ')' : ''} · ${r.subject}`;
 }
 
+export function formatForward(r) {
+  return `forwarded → ${(r.to || []).join(', ')} · ${r.subject}` + (r.attachments && r.attachments.length ? ` (+${r.attachments.length} attachment(s))` : '');
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',

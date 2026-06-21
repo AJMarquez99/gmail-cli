@@ -1,5 +1,5 @@
 import { withClient } from './read.js';
-import { buildMessage, buildRawMime } from '../compose.js';
+import { buildMessage, buildRawMime, toList } from '../compose.js';
 import { fetchRawMessage, appendDraft } from '../writer.js';
 import { resolveRecipients, enforceAllowlist, logSend } from '../transmit.js';
 import { InvalidInputError } from '../lib/errors.js';
@@ -62,4 +62,38 @@ export async function runReply(opts, deps) {
   const info = await deps.createTransport(creds).sendMail(message);
   logSend({ from: message.from, to, cc, subject, messageId: info.messageId }, opts, { profile }, deps);
   return { action: 'replied', to, cc, subject, messageId: info.messageId, accepted: info.accepted || [] };
+}
+
+function forwardHeader(orig) {
+  const from = addr(orig.from) || '';
+  const to = addrs(orig.to).join(', ');
+  return `---------- Forwarded message ----------\nFrom: ${from}\nSubject: ${orig.subject || ''}\nTo: ${to}`;
+}
+
+export async function runForward(opts, deps) {
+  const to = toList(opts.to);
+  if (to.length === 0) throw new InvalidInputError('Forward needs at least one --to recipient.');
+  const profile = deps.resolveProfile(opts.profile);
+  const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
+
+  const raw = await withClient(opts, deps, async (client) =>
+    fetchRawMessage(client, { uid: opts.uid, mailbox: opts.mailbox }));
+  if (!raw) throw new InvalidInputError(`No message found at uid ${opts.uid} in ${opts.mailbox || 'INBOX'}.`);
+  const orig = await deps.parseMessage(raw);
+
+  const subject = /^fwd:/i.test(orig.subject || '') ? orig.subject : `Fwd: ${orig.subject || ''}`;
+  const body = `${opts.body ? opts.body + '\n\n' : ''}${forwardHeader(orig)}\n\n${orig.text || ''}`;
+  const synthetic = { ...opts, subject, body, inReplyTo: undefined, references: [] };
+  const { message } = buildMessage({ to, cc: [], bcc: [] }, synthetic, { profile, creds }, deps);
+
+  // Re-attach the original attachments (content buffers, not file paths).
+  const origAtts = (orig.attachments || []).map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType }));
+  if (origAtts.length) message.attachments = [...(message.attachments || []), ...origAtts];
+
+  const { enforce, denied } = resolveRecipients({ to, cc: [], bcc: [] }, opts, { profile, creds }, deps);
+  enforceAllowlist(denied, enforce);
+  const info = await deps.createTransport(creds).sendMail(message);
+  logSend({ from: message.from, to, subject, messageId: info.messageId }, opts, { profile }, deps);
+  return { action: 'forwarded', to, subject, messageId: info.messageId, accepted: info.accepted || [],
+    attachments: origAtts.map((a) => a.filename) };
 }

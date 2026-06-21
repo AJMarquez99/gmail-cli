@@ -11,14 +11,14 @@ import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
 import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize, formatCount, formatDownload, formatReply } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize, formatCount, formatDownload, formatReply, formatForward } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread, runReadCount, runReadDownload } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove, runLabelCreate, runLabelDelete, runLabelRename } from './commands/label.js';
 import { runMark } from './commands/mark.js';
 import { runWhoami } from './commands/whoami.js';
 import { runDraftCreate, runDraftDelete, runDraftSend } from './commands/draft.js';
 import { runArchive, runMove, runTrash, runDelete } from './commands/organize.js';
-import { runReply } from './commands/reply.js';
+import { runReply, runForward } from './commands/reply.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -351,6 +351,35 @@ export function buildProgram(deps = defaultDeps) {
           args: ['uid'],
           preprocess: async (opts) => {
             if (!opts.body && !opts.html) {
+              const piped = await readStdin();
+              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
+            }
+          },
+        },
+        deps,
+      ),
+    );
+
+  program
+    .command('forward <uid>')
+    .description('Forward a message by UID, re-attaching the original attachments')
+    .option('--to <addr>', 'recipient (repeatable; comma-separated ok)', collect, [])
+    .option('--body <text>', 'optional intro before the forwarded message (or pipe it on stdin)')
+    .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
+    .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
+    .option('--from-name <name>', 'display name on the From header')
+    .option('--no-signature', 'do not append the configured signature')
+    .option('--no-allowlist', 'disable the recipient allowlist for this send')
+    .option('--no-log', 'do not append this send to the send log')
+    .option('--mailbox <name>', 'source mailbox to fetch the message from', 'INBOX')
+    .action(
+      handle(
+        runForward,
+        {
+          table: formatForward,
+          args: ['uid'],
+          preprocess: async (opts) => {
+            if (!opts.body) {
               const piped = await readStdin();
               if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
             }
