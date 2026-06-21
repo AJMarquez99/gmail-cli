@@ -530,6 +530,79 @@ the `organize` capability; `trash`/`delete` need `delete`; `read count`/`read do
 `--permanent`** on top of the `delete` capability — there is no interactive confirmation (it would
 not fit the JSON/agentic model), so `--permanent` is the explicit intent guard.
 
+## Rules engine (local filters)
+
+A stateless, App-Password-only rules engine: define `match → actions` rules per profile, then
+**apply them on demand** over IMAP (pair with `cron` or a loop for cadence). It is *not* a
+server-side filter — it only runs when you invoke it — but you can also **export importable Gmail
+filter XML** for true always-on server-side rules.
+
+### Define rules
+
+```bash
+# Add a rule (always allowed — defining a rule never touches the mailbox)
+gmail rules add --match "from:acme.com newer_than:7d" --label "Outreach/Acme" --archive
+
+# With a custom id, star + mark read, or move/trash
+gmail rules add --match "from:newsletter@x.com" --id news --mark read --star
+gmail rules add --match "subject:invoice" --move "Finance"
+gmail rules add --match "from:spammy.example" --trash
+
+gmail rules list
+gmail rules remove news
+```
+
+Rules live in `rules-{profile}.json` (default `~/.config/gmail-cli/rules.json`; override with
+`GMAIL_RULES`):
+
+```jsonc
+{
+  "rules": [
+    {
+      "id": "outreach-acme",
+      "match": "from:acme.com newer_than:7d",   // Gmail search query (same syntax as read/search)
+      "actions": ["label:Outreach/Acme", "archive"],
+      "mailbox": "INBOX"                          // search scope
+    }
+  ]
+}
+```
+
+Actions: `label:<name>`, `unlabel:<name>`, `archive`, `mark:read`, `star`, `important`,
+`move:<mailbox>`, `trash`. **Rules cannot permanently delete** — `trash` (recoverable) is the only
+destructive action.
+
+### Apply rules
+
+```bash
+# Apply all rules now (gated: needs the `organize` capability)
+gmail rules apply
+
+# Preview without mutating anything
+gmail rules apply --dry-run
+
+# Apply only one rule, and/or cap matches per rule
+gmail rules apply --rule outreach-acme --limit 50
+```
+
+`rules apply` is gated by the `organize` capability as a baseline, **plus per-action checks**: an
+action whose bucket the profile lacks (e.g. a `trash` action under a profile without `delete`) is
+**skipped and reported**, not executed. Apply is idempotent (re-running is safe; there is no state
+file). A non-positive or non-numeric `--limit` is ignored (no cap).
+
+### Export to Gmail filters
+
+```bash
+# Emit Gmail "Settings → Filters → Import" XML, then import it once by hand in the Gmail UI
+gmail rules export-xml --format table > filters.xml
+```
+
+The `match` query maps to Gmail's **"Has the words"** criterion; `archive`/`mark:read`/`star`/
+`important`/`trash` map to the corresponding filter properties; `move:<mbox>` maps to label +
+archive. **Caveats:** Gmail filters act on *incoming* mail going forward (not your existing inbox);
+relative-date operators like `newer_than` behave differently server-side; `unlabel` has no
+server-side equivalent and is omitted from the export.
+
 ## Commands
 
 | Command | Description |
@@ -573,6 +646,11 @@ not fit the JSON/agentic model), so `--permanent` is the explicit intent guard.
 | `gmail profile remove <name>` | Unregister a profile from config (files left on disk). |
 | `gmail profile caps <name>` | Show or set a profile's capability scope (`--allow b,b` or `--deny b,b`). |
 | `gmail whoami` | Show the resolved profile, account, capability mode, and granted buckets. |
+| `gmail rules add` | Define a rule (`--match` + actions: `--label/--archive/--mark read/--star/--important/--move/--trash`). Always allowed. |
+| `gmail rules list` | List defined rules. |
+| `gmail rules remove <id>` | Remove a rule by id. |
+| `gmail rules apply` | Apply rules over IMAP (`--dry-run`, `--rule <id>`, `--limit <n>`). Gated: `organize` + per-action checks. |
+| `gmail rules export-xml` | Emit importable Gmail filter XML to stdout. Always allowed. |
 
 Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` recipient blocked by allowlist · `4` capability denied (command's bucket not granted to the profile).
 
