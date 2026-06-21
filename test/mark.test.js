@@ -218,3 +218,91 @@ describe('CLI integration — mark --unread', () => {
     expect(call.opts.useLabels).toBeFalsy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// runMark — --star / --unstar
+// ---------------------------------------------------------------------------
+
+describe('runMark — --star', () => {
+  it('calls starMessage with { uid: 7, on: true } and returns { uid, starred: true, action: "starred" }', async () => {
+    const deps = makeDeps();
+    const result = await runMark({ uid: '7', star: true, mailbox: 'INBOX' }, deps);
+    expect(result).toEqual({ uid: 7, starred: true, action: 'starred' });
+    const call = deps._client._flagsAddCalls[0];
+    expect(call.uid).toBe(7);
+    expect(call.flags).toEqual(['\\Starred']);
+    expect(call.opts).toMatchObject({ uid: true, useLabels: true });
+  });
+});
+
+describe('runMark — --unstar', () => {
+  it('calls starMessage with { uid: 7, on: false } and returns { uid, starred: false, action: "unstarred" }', async () => {
+    const deps = makeDeps();
+    const result = await runMark({ uid: '7', unstar: true, mailbox: 'INBOX' }, deps);
+    expect(result).toEqual({ uid: 7, starred: false, action: 'unstarred' });
+    const call = deps._client._flagsRemoveCalls[0];
+    expect(call.uid).toBe(7);
+    expect(call.flags).toEqual(['\\Starred']);
+    expect(call.opts).toMatchObject({ uid: true, useLabels: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runMark — --important / --unimportant
+// ---------------------------------------------------------------------------
+
+describe('runMark — --important', () => {
+  it('calls importantMessage with { uid: 7, on: true } and returns { uid, important: true, action: "marked-important" }', async () => {
+    const deps = makeDeps();
+    const result = await runMark({ uid: '7', important: true, mailbox: 'INBOX' }, deps);
+    expect(result).toEqual({ uid: 7, important: true, action: 'marked-important' });
+    const call = deps._client._flagsAddCalls[0];
+    expect(call.uid).toBe(7);
+    expect(call.flags).toEqual(['\\Important']);
+    expect(call.opts).toMatchObject({ uid: true, useLabels: true });
+  });
+});
+
+describe('runMark — --unimportant', () => {
+  it('calls importantMessage with { uid: 7, on: false } and returns { uid, important: false, action: "unmarked-important" }', async () => {
+    const deps = makeDeps();
+    const result = await runMark({ uid: '7', unimportant: true, mailbox: 'INBOX' }, deps);
+    expect(result).toEqual({ uid: 7, important: false, action: 'unmarked-important' });
+    const call = deps._client._flagsRemoveCalls[0];
+    expect(call.uid).toBe(7);
+    expect(call.flags).toEqual(['\\Important']);
+    expect(call.opts).toMatchObject({ uid: true, useLabels: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runMark — exactly-one-action enforcement (zero or multiple)
+// ---------------------------------------------------------------------------
+
+describe('runMark — zero actions', () => {
+  it('throws InvalidInputError when no action flags are provided', async () => {
+    const deps = makeDeps();
+    await expect(runMark({}, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
+  });
+});
+
+describe('runMark — multiple actions', () => {
+  it('throws InvalidInputError when --read and --star are both provided', async () => {
+    const deps = makeDeps();
+    await expect(runMark({ read: true, star: true }, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
+  });
+
+  it('throws InvalidInputError when --read and --unread are both provided', async () => {
+    const deps = makeDeps();
+    await expect(runMark({ read: true, unread: true }, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
+  });
+
+  it('throws InvalidInputError when --star and --important are both provided', async () => {
+    const deps = makeDeps();
+    await expect(runMark({ star: true, important: true }, deps)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(deps._client.connected).toBe(false);
+  });
+});

@@ -252,9 +252,13 @@ export function buildProgram(deps = defaultDeps) {
 
   program
     .command('mark <uid>')
-    .description('Mark a message read or unread')
+    .description('Mark a message read, unread, starred, or important')
     .option('--read', 'mark as read')
     .option('--unread', 'mark as unread')
+    .option('--star', 'star the message')
+    .option('--unstar', 'remove star from the message')
+    .option('--important', 'mark as important')
+    .option('--unimportant', 'remove important flag from the message')
     .option('--mailbox <name>', 'mailbox', 'INBOX')
     .action(handle(runMark, { table: formatMark, args: ['uid'] }, deps));
 
