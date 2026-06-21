@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runRulesAdd, runRulesList, runRulesRemove, runRulesExportXml } from '../src/commands/rules.js';
+import { buildProgram } from '../src/cli.js';
+import { resolveCapabilities } from '../src/capabilities.js';
+import { runRulesAdd, runRulesList, runRulesRemove, runRulesApply, runRulesExportXml } from '../src/commands/rules.js';
 
 const mkDeps = (initialRules = []) => {
   let store = { rules: initialRules };
@@ -59,5 +61,70 @@ describe('rules list / remove / export-xml', () => {
     const r = await runRulesExportXml({}, deps);
     expect(r.xml).toContain("<apps:property name='hasTheWord' value='from:x'/>");
     expect(r.xml).toContain("<apps:property name='shouldArchive' value='true'/>");
+  });
+});
+
+// Recording IMAP client whose search returns a fixed uid set.
+const mkClient = (uids) => {
+  const calls = [];
+  return { calls,
+    connect: vi.fn(async () => {}),
+    logout: vi.fn(async () => {}),
+    mailboxOpen: async (m) => calls.push(['open', m]),
+    search: async (q, o) => { calls.push(['search', q, o]); return uids; },
+    messageFlagsRemove: async (u, f, o) => calls.push(['remove', Number(u), f, o]),
+    messageMove: async (u, d, o) => calls.push(['move', Number(u), d, o]),
+  };
+};
+
+const baseProfile = (caps) => ({
+  name: 'biz', legacy: false, imap: {}, rulesPath: '/rules.json',
+  credentialsPath: '/creds.json',
+  capabilities: resolveCapabilities(caps),
+});
+
+describe('runRulesApply (direct)', () => {
+  it('skips a trash action under an organize-only profile, applies archive', async () => {
+    const client = mkClient([5]);
+    const deps = {
+      resolveProfile: vi.fn(() => baseProfile({ capabilities: ['read', 'organize'] })),
+      resolveCredentials: vi.fn(() => ({ user: 'me@x.com', appPassword: 'pw' })),
+      createImapClient: vi.fn(() => client),
+      readFile: vi.fn(() => JSON.stringify({ rules: [{ id: 'r', match: 'from:x', actions: ['archive', 'trash'], mailbox: 'INBOX' }] })),
+    };
+    const rep = await runRulesApply({}, deps);
+    expect(rep.rules[0].applied).toEqual([{ uid: 5, action: 'archive' }]);
+    expect(rep.rules[0].skipped).toEqual([{ action: 'trash', reason: 'capability:delete' }]);
+    expect(client.calls.some((c) => c[0] === 'move')).toBe(false); // trash never executed
+    expect(client.logout).toHaveBeenCalled(); // withClient always logs out
+  });
+
+  it('dry-run mutates nothing', async () => {
+    const client = mkClient([5, 6]);
+    const deps = {
+      resolveProfile: vi.fn(() => baseProfile({ capabilities: ['organize'] })),
+      resolveCredentials: vi.fn(() => ({ user: 'me@x.com', appPassword: 'pw' })),
+      createImapClient: vi.fn(() => client),
+      readFile: vi.fn(() => JSON.stringify({ rules: [{ id: 'r', match: 'from:x', actions: ['archive'], mailbox: 'INBOX' }] })),
+    };
+    const rep = await runRulesApply({ dryRun: true }, deps);
+    expect(rep.dryRun).toBe(true);
+    expect(client.calls.some((c) => c[0] === 'remove')).toBe(false);
+  });
+});
+
+describe('rules apply gate (e2e parseAsync)', () => {
+  it('a read-only profile is denied rules apply with exit 4', async () => {
+    const deps = {
+      resolveProfile: vi.fn(() => baseProfile({ capabilities: ['read'] })),
+    };
+    const program = buildProgram(deps);
+    const errSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    process.exitCode = 0;
+    await program.parseAsync(['node', 'gmail', 'rules', 'apply']);
+    expect(process.exitCode).toBe(4);
+    expect(errSpy.mock.calls.join('')).toMatch(/capability/i);
+    errSpy.mockRestore();
+    process.exitCode = 0;
   });
 });
