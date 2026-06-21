@@ -45,3 +45,49 @@ export function profileCan(profile, bucket) {
     ? profile.capabilities.allowed.has(bucket)
     : false;
 }
+
+/**
+ * Command-path → required capability. A bucket string, a function (opts)=>bucket for
+ * flag-dependent commands, or null for always-allowed. Keys are space-joined command paths
+ * matching the commander registration in cli.js (e.g. 'read list'). Later phases ADD their
+ * commands here; the coverage-guard test fails if a registered command is missing.
+ */
+export const COMMAND_CAPABILITY = {
+  send: CAPS.SEND,
+  'read list': CAPS.READ,
+  'read search': CAPS.READ,
+  'read show': CAPS.READ,
+  'read thread': CAPS.READ,
+  'label list': CAPS.READ,
+  'label add': CAPS.ORGANIZE,
+  'label remove': CAPS.ORGANIZE,
+  mark: CAPS.ORGANIZE,
+  // always-allowed (local config / diagnostics / introspection):
+  doctor: null,
+  init: null,
+  login: null,
+  whoami: null,
+  log: null,
+  'allow list': null,
+  'allow add': null,
+  'allow remove': null,
+  'config set': null,
+  'config get': null,
+  'config unset': null,
+  'profile add': null,
+  'profile list': null,
+  'profile use': null,
+  'profile remove': null,
+  'profile caps': null,
+};
+
+/**
+ * Resolve the capability a command path requires for the given opts.
+ * Returns a bucket string, or null when the command is always-allowed (or unmapped — the
+ * coverage-guard test enforces that every registered command is mapped).
+ */
+export function requiredCapability(commandPath, opts = {}) {
+  const cap = COMMAND_CAPABILITY[commandPath];
+  if (cap == null) return null;
+  return typeof cap === 'function' ? cap(opts) : cap;
+}

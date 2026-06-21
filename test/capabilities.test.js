@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CapabilityDeniedError, InvalidInputError } from '../src/lib/errors.js';
-import { BUCKETS, resolveCapabilities, profileCan } from '../src/capabilities.js';
+import { BUCKETS, resolveCapabilities, profileCan, COMMAND_CAPABILITY, requiredCapability } from '../src/capabilities.js';
 
 describe('CapabilityDeniedError', () => {
   it('carries exit code 4 and names the bucket + profile', () => {
@@ -45,5 +45,30 @@ describe('profileCan', () => {
   });
   it('false-safe on a profile without capabilities', () => {
     expect(profileCan({}, 'read')).toBe(false);
+  });
+});
+
+describe('requiredCapability', () => {
+  it('maps existing commands to their buckets', () => {
+    expect(requiredCapability('send', {})).toBe('send');
+    expect(requiredCapability('read list', {})).toBe('read');
+    expect(requiredCapability('label list', {})).toBe('read');     // listing is read
+    expect(requiredCapability('label add', {})).toBe('organize');
+    expect(requiredCapability('mark', {})).toBe('organize');
+  });
+  it('always-allowed commands resolve to null', () => {
+    expect(requiredCapability('doctor', {})).toBeNull();
+    expect(requiredCapability('whoami', {})).toBeNull();
+    expect(requiredCapability('profile caps', {})).toBeNull();
+  });
+  it('unmapped path is treated as always-allowed (coverage test is the real guard)', () => {
+    expect(requiredCapability('totally unknown', {})).toBeNull();
+  });
+  it('supports dynamic (function) capabilities', () => {
+    // forward-compat: a function entry is evaluated against opts
+    COMMAND_CAPABILITY['__test_dyn'] = (o) => (o.draft ? 'draft' : 'send');
+    expect(requiredCapability('__test_dyn', { draft: true })).toBe('draft');
+    expect(requiredCapability('__test_dyn', {})).toBe('send');
+    delete COMMAND_CAPABILITY['__test_dyn'];
   });
 });
