@@ -7,6 +7,9 @@ describe('parseAction', () => {
     expect(parseAction('move:Saved')).toEqual({ raw: 'move:Saved', type: 'move', arg: 'Saved', bucket: 'organize' });
     expect(parseAction('unlabel:X')).toEqual({ raw: 'unlabel:X', type: 'unlabel', arg: 'X', bucket: 'organize' });
   });
+  it('preserves colons in label arg (label:A:B)', () => {
+    expect(parseAction('label:A:B')).toEqual({ raw: 'label:A:B', type: 'label', arg: 'A:B', bucket: 'organize' });
+  });
   it('parses bare actions', () => {
     expect(parseAction('archive')).toEqual({ raw: 'archive', type: 'archive', bucket: 'organize' });
     expect(parseAction('mark:read')).toEqual({ raw: 'mark:read', type: 'mark-read', bucket: 'organize' });

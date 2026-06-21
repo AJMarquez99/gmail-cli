@@ -37,16 +37,16 @@ export async function runRulesAdd(opts, deps) {
   parseActions(actions); // validate the DSL (throws InvalidInputError on a bad action)
 
   const profile = deps.resolveProfile(opts.profile);
-  const path = profile.rulesPath;
-  const rules = loadRules({ path, readFile: deps.readFile });
+  const rulesPath = profile.rulesPath;
+  const rules = loadRules({ path: rulesPath, readFile: deps.readFile });
   const id = opts.id || slugify(opts.match);
   if (rules.some((r) => r.id === id)) {
     throw new InvalidInputError(`Rule id "${id}" already exists. Pass --id to choose another, or remove it first.`);
   }
   const rule = { id, match: opts.match, actions, mailbox: opts.mailbox || 'INBOX' };
   rules.push(rule);
-  deps.ensureDir(dirname(path));
-  saveRules(path, rules, { writeFile: deps.writeFile });
+  deps.ensureDir(dirname(rulesPath));
+  saveRules(rulesPath, rules, { writeFile: deps.writeFile });
   return { id, action: 'added', rule };
 }
 
@@ -58,12 +58,12 @@ export async function runRulesList(opts, deps) {
 
 export async function runRulesRemove(opts, deps) {
   const profile = deps.resolveProfile(opts.profile);
-  const path = profile.rulesPath;
-  const rules = loadRules({ path, readFile: deps.readFile });
+  const rulesPath = profile.rulesPath;
+  const rules = loadRules({ path: rulesPath, readFile: deps.readFile });
   const next = rules.filter((r) => r.id !== opts.id);
   if (next.length === rules.length) throw new InvalidInputError(`No rule with id "${opts.id}".`);
-  deps.ensureDir(dirname(path));
-  saveRules(path, next, { writeFile: deps.writeFile });
+  deps.ensureDir(dirname(rulesPath));
+  saveRules(rulesPath, next, { writeFile: deps.writeFile });
   return { id: opts.id, action: 'removed' };
 }
 
@@ -77,7 +77,7 @@ export async function runRulesApply(opts, deps) {
         profileCan: (bucket) => profileCan(profile, bucket),
         dryRun: !!opts.dryRun,
         ruleId: opts.rule || null,
-        limit: opts.limit ? Number(opts.limit) : null,
+        limit: opts.limit && Number(opts.limit) > 0 ? Number(opts.limit) : null,
       },
       deps,
     );

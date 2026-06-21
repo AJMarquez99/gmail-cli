@@ -37,7 +37,7 @@ export async function applyRules(client, rules, { profileCan, dryRun = false, ru
 
     await client.mailboxOpen(mailbox);
     let uids = await client.search({ gmraw: rule.match }, { uid: true });
-    if (limit != null) uids = uids.slice(-limit);
+    if (limit != null && limit > 0) uids = uids.slice(-limit);
     entry.matched = uids.length;
 
     for (const uid of uids) {

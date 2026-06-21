@@ -61,6 +61,17 @@ describe('applyRules', () => {
     expect(rep.rules[0].matched).toBe(2); // slice(-2) of [5,6,7]
   });
 
+  it('limit:0 is ignored (no cap) — use a positive integer to cap', async () => {
+    // With the old slice(-0) bug, limit:0 returned the FULL array accidentally.
+    // The fix makes limit:0 explicitly ignored (treated as "no limit").
+    // Either way the result is the full set, but now it is deterministic, not accidental.
+    const c = mkClient([5, 6, 7]);
+    const rules = [{ id: 'r1', match: 'from:x', actions: ['archive'], mailbox: 'INBOX' }];
+    const rep = await applyRules(c, rules, { profileCan: allow, limit: 0 }, {});
+    // limit:0 is ignored → full search result (3 uids) is processed
+    expect(rep.rules[0].matched).toBe(3);
+  });
+
   it('a malformed action records an error and skips the rule', async () => {
     const c = mkClient([5]);
     const rules = [{ id: 'bad', match: 'from:x', actions: ['frobnicate'], mailbox: 'INBOX' }];

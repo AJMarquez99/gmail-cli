@@ -40,6 +40,11 @@ describe('rulesToFilterXml', () => {
     expect(xml).toContain("value='A&amp;B'");
   });
 
+  it('escapes < and > in match values', () => {
+    const xml = rulesToFilterXml([{ id: 'lt-gt', match: 'subject:<foo>', actions: ['archive'] }]);
+    expect(xml).toContain('&lt;foo&gt;');
+  });
+
   it('omits unlabel (no server-side equivalent)', () => {
     const xml = rulesToFilterXml([{ id: 'u', match: 'from:x', actions: ['unlabel:Y'] }]);
     expect(xml).not.toContain('unlabel');
