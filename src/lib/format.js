@@ -102,6 +102,10 @@ export function formatProfileList(r) {
     .join('\n');
 }
 
+export function formatProfileCaps(r) {
+  return `profile ${r.name}: ${r.mode} → ${r.capabilities.join(', ') || '(none)'}`;
+}
+
 export function formatProfileMutation(r) {
   if (r.action === 'created') {
     return `created profile ${r.name}${r.default ? ' (now the default)' : ''}`;

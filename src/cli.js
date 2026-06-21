@@ -8,10 +8,10 @@ import { runLog } from './commands/log.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
-import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove } from './commands/profile.js';
+import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
 import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
 import { requiredCapability, profileCan } from './capabilities.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark } from './lib/format.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
 import { runMark } from './commands/mark.js';
@@ -194,6 +194,12 @@ export function buildProgram(deps = defaultDeps) {
     .command('remove <name>')
     .description('Unregister a profile (its files are left on disk)')
     .action(handle(runProfileRemove, { table: formatProfileMutation, args: ['name'] }, deps));
+  profileCmd
+    .command('caps <name>')
+    .description("Show or set a profile's capability scope (allowlist or denylist)")
+    .option('--allow <buckets>', 'comma-separated buckets to allow (allowlist mode)')
+    .option('--deny <buckets>', 'comma-separated buckets to deny (denylist mode)')
+    .action(handle(runProfileCaps, { table: formatProfileCaps, args: ['name'] }, deps));
 
   const read = program.command('read').description('Read mail over IMAP');
   read
