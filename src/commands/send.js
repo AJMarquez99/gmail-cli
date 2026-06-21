@@ -1,6 +1,6 @@
-import { InvalidInputError, RecipientNotAllowedError } from '../lib/errors.js';
-import { makeAllowChecker } from '../allowlist.js';
+import { InvalidInputError } from '../lib/errors.js';
 import { toList, buildMessage } from '../compose.js';
+import { resolveRecipients, enforceAllowlist, logSend } from '../transmit.js';
 
 export async function runSend(opts, deps) {
   const to = toList(opts.to);
@@ -17,23 +17,9 @@ export async function runSend(opts, deps) {
   const profile = deps.resolveProfile(opts.profile);
   const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
 
-  // Determine whether allowlist enforcement is active. Default: ON (fail-closed).
-  // Turned off by: opts.noAllowlist, opts.allowlist === false, or profile.allowlistEnforce === false.
-  const enforce = !(opts.noAllowlist || opts.allowlist === false) && profile.allowlistEnforce;
-
   // Resolve recipients; collect denials but do not throw yet (dry-run needs to report them).
-  const { resolve } = makeAllowChecker({ allowlist: deps.loadAllowlist({ path: profile.allowlistPath }), self: creds.user });
-  const denied = [];
-  const allow = (list) =>
-    list.map((token) => {
-      const r = resolve(token);
-      if (r.email) return r.email;                             // allowed or alias-expanded
-      if (enforce) { denied.push(r.denied); return undefined; } // will throw later
-      return r.denied;                                          // enforcement off: pass through as-is
-    });
-  const toResolved = allow(to);
-  const ccResolved = allow(cc);
-  const bccResolved = allow(bcc);
+  const { enforce, denied, to: toResolved, cc: ccResolved, bcc: bccResolved } =
+    resolveRecipients({ to, cc, bcc }, opts, { profile, creds }, deps);
 
   const { message, attachmentsOut } = buildMessage(
     { to: toResolved, cc: ccResolved, bcc: bccResolved },
@@ -59,12 +45,7 @@ export async function runSend(opts, deps) {
   }
 
   // Real send: enforce allowlist now (denied is only populated when enforce is true).
-  if (denied.length) throw new RecipientNotAllowedError(denied);
-
-  // Warn on real sends when enforcement is off.
-  if (!enforce) {
-    process.stderr.write('warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).\n');
-  }
+  enforceAllowlist(denied, enforce);
 
   const transporter = deps.createTransport(creds);
   const info = await transporter.sendMail(message);
@@ -76,20 +57,11 @@ export async function runSend(opts, deps) {
     attachments: attachmentsOut,
   };
 
-  // Commander maps --no-log → opts.log === false; opts.noLog covers programmatic/test use.
-  const logEnabled = !(opts.noLog || opts.log === false) && profile.sendLog.enabled !== false;
-  if (logEnabled) {
-    try {
-      const entry = {
-        ts: deps.now(), from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
-        subject: message.subject, messageId: info.messageId, attachments: attachmentsOut.map((a) => a.filename),
-      };
-      if (opts.logBody || profile.sendLog.logBody) { entry.text = message.text ?? null; entry.html = message.html ?? null; }
-      deps.appendLog(entry, { path: profile.sendLogPath });
-    } catch (err) {
-      process.stderr.write(`warn: send-log write failed: ${err.message}\n`);
-    }
-  }
+  logSend({ from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
+    subject: message.subject, messageId: info.messageId,
+    attachments: attachmentsOut.map((a) => a.filename),
+    ...(opts.logBody || profile.sendLog.logBody ? { text: message.text ?? null, html: message.html ?? null } : {}) },
+  opts, { profile }, deps);
 
   return result;
 }

@@ -1,8 +1,8 @@
 import { withClient } from './read.js';
 import { buildMessage, buildRawMime, toList } from '../compose.js';
 import { appendDraft, deleteMessage, fetchRawMessage, DRAFTS } from '../writer.js';
-import { makeAllowChecker } from '../allowlist.js';
-import { InvalidInputError, RecipientNotAllowedError } from '../lib/errors.js';
+import { InvalidInputError } from '../lib/errors.js';
+import { resolveRecipients, enforceAllowlist, logSend } from '../transmit.js';
 
 /** Create a draft: assemble the message (NO allowlist — nothing transmits) and APPEND to Drafts. */
 export async function runDraftCreate(opts, deps) {
@@ -36,30 +36,16 @@ export async function runDraftSend(opts, deps) {
   const to = addrs('to'), cc = addrs('cc'), bcc = addrs('bcc');
 
   // 2. Enforce the allowlist at this transmission boundary (same policy as send).
-  const enforce = !(opts.noAllowlist || opts.allowlist === false) && profile.allowlistEnforce;
-  const { resolve } = makeAllowChecker({ allowlist: deps.loadAllowlist({ path: profile.allowlistPath }), self: creds.user });
-  const denied = [];
-  const check = (list) => list.forEach((t) => { const r = resolve(t); if (!r.email && enforce) denied.push(r.denied); });
-  check(to); check(cc); check(bcc);
-  if (enforce && denied.length) throw new RecipientNotAllowedError(denied);
-
-  // Warn on real sends when enforcement is off (mirrors send.js).
-  if (!enforce) {
-    process.stderr.write('warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).\n');
-  }
+  const { enforce, denied } = resolveRecipients({ to, cc, bcc }, opts, { profile, creds }, deps);
+  enforceAllowlist(denied, enforce);
 
   // 3. Transmit the raw message with an explicit envelope, then delete the draft, then log.
   const envelope = { from: creds.user, to: [...to, ...cc, ...bcc] };
   const info = await deps.createTransport(creds).sendMail({ raw, envelope });
   await withClient(opts, deps, async (client) => deleteMessage(client, { uid: opts.uid, mailbox: DRAFTS }));
 
-  const logEnabled = !(opts.noLog || opts.log === false) && profile.sendLog.enabled !== false;
-  if (logEnabled) {
-    try {
-      deps.appendLog({ ts: deps.now(), from: creds.user, to, cc, bcc, subject: parsed.subject || '',
-        messageId: info.messageId }, { path: profile.sendLogPath });
-    } catch (err) { process.stderr.write(`warn: send-log write failed: ${err.message}\n`); }
-  }
+  logSend({ from: creds.user, to, cc, bcc, subject: parsed.subject || '', messageId: info.messageId },
+    opts, { profile }, deps);
   return { action: 'draft-sent', uid: Number(opts.uid), to, cc, bcc, subject: parsed.subject || '',
     messageId: info.messageId, accepted: info.accepted || [] };
 }
