@@ -74,6 +74,7 @@ export const COMMAND_CAPABILITY = {
   'draft create': CAPS.DRAFT,
   'draft delete': CAPS.DRAFT,
   'draft send': CAPS.SEND,
+  reply: (o) => (o.draft ? 'draft' : 'send'),
   // always-allowed (local config / diagnostics / introspection):
   doctor: null,
   init: null,

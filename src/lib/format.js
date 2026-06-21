@@ -246,6 +246,11 @@ export function formatDownload(r) {
     : `no attachments on uid ${r.uid}`;
 }
 
+export function formatReply(r) {
+  const verb = r.action === 'reply-drafted' ? 'drafted reply' : 'replied';
+  return `${verb} → ${(r.to || []).join(', ')}${r.cc && r.cc.length ? ' (cc ' + r.cc.join(', ') + ')' : ''} · ${r.subject}`;
+}
+
 export function formatDryRun(r) {
   const lines = [
     'DRY RUN — nothing sent',
