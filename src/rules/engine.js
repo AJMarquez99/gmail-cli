@@ -40,17 +40,17 @@ export async function applyRules(client, rules, { profileCan, dryRun = false, ru
     if (limit != null && limit > 0) uids = uids.slice(-limit);
     entry.matched = uids.length;
 
-    for (const uid of uids) {
+    if (uids.length) {
       for (const a of permitted) {
         if (dryRun) {
-          entry.applied.push({ uid, action: a.raw, dryRun: true });
+          for (const uid of uids) entry.applied.push({ uid, action: a.raw, dryRun: true });
           continue;
         }
         try {
-          await runAction(client, a, { uid, mailbox }, deps);
-          entry.applied.push({ uid, action: a.raw });
+          await runAction(client, a, { uid: uids, mailbox }, deps); // ONE batched IMAP op per action
+          for (const uid of uids) entry.applied.push({ uid, action: a.raw });
         } catch (err) {
-          entry.errors.push({ uid, action: a.raw, error: err.message });
+          for (const uid of uids) entry.errors.push({ uid, action: a.raw, error: err.message });
         }
       }
     }
