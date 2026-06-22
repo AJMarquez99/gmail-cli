@@ -32,10 +32,10 @@ export async function deleteMessage(client, { uid, mailbox }) {
  *
  * @param {object} client   Connected imapflow client.
  * @param {object} [opts]
- * @param {number|string} [opts.uid]      Message UID.
+ * @param {number|string|Array<number|string>} [opts.uid]  Message UID, or an array of UIDs (batched into one IMAP command).
  * @param {string} [opts.label]           Label/mailbox path to add.
  * @param {string} [opts.mailbox='INBOX']
- * @returns {Promise<{uid:number, label:string, action:'added'}>}
+ * @returns {Promise<{uid:number|number[], label:string, action:'added'}>}
  */
 export async function addLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
   await client.mailboxOpen(mailbox);
@@ -48,10 +48,10 @@ export async function addLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
  *
  * @param {object} client   Connected imapflow client.
  * @param {object} [opts]
- * @param {number|string} [opts.uid]      Message UID.
+ * @param {number|string|Array<number|string>} [opts.uid]  Message UID, or an array of UIDs (batched into one IMAP command).
  * @param {string} [opts.label]           Label/mailbox path to remove.
  * @param {string} [opts.mailbox='INBOX']
- * @returns {Promise<{uid:number, label:string, action:'removed'}>}
+ * @returns {Promise<{uid:number|number[], label:string, action:'removed'}>}
  */
 export async function removeLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
   await client.mailboxOpen(mailbox);
@@ -64,10 +64,10 @@ export async function removeLabel(client, { uid, label, mailbox = 'INBOX' } = {}
  *
  * @param {object} client   Connected imapflow client.
  * @param {object} [opts]
- * @param {number|string} [opts.uid]      Message UID.
+ * @param {number|string|Array<number|string>} [opts.uid]  Message UID, or an array of UIDs (batched into one IMAP command).
  * @param {boolean} [opts.seen]           true → mark read, false → mark unread.
  * @param {string} [opts.mailbox='INBOX']
- * @returns {Promise<{uid:number, seen:boolean, action:'read'|'unread'}>}
+ * @returns {Promise<{uid:number|number[], seen:boolean, action:'read'|'unread'}>}
  */
 export async function markMessage(client, { uid, seen, mailbox = 'INBOX' } = {}) {
   await client.mailboxOpen(mailbox);
