@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { runDoctor } from '../src/commands/doctor.js';
 import { MissingCredentialsError } from '../src/lib/errors.js';
 import { resolveProfile } from '../src/profile.js';
+import { resolveCapabilities } from '../src/capabilities.js';
 
 const allow = (n) => vi.fn(() => ({ recipients: Array.from({ length: n }, (_, i) => ({ email: `r${i}@x.com` })) }));
 
@@ -43,6 +44,8 @@ describe('runDoctor', () => {
       imap: 'ok',
       allowlist: 2,
       allowlistEnforced: true,
+      mode: 'unrestricted',
+      capabilities: ['read', 'organize', 'draft', 'send', 'delete'],
     });
   });
 
@@ -64,6 +67,8 @@ describe('runDoctor', () => {
       imap: 'ok',
       allowlist: 0,
       allowlistEnforced: true,
+      mode: 'unrestricted',
+      capabilities: ['read', 'organize', 'draft', 'send', 'delete'],
     });
   });
 
@@ -280,5 +285,33 @@ describe('runDoctor', () => {
     const out = await runDoctor({}, deps);
     expect(out.smtp).not.toBe('ok');
     expect(out.ok).toBe(false);
+  });
+
+  it('surfaces mode and capabilities from the resolved profile', async () => {
+    const caps = resolveCapabilities({ capabilities: ['read'] });
+    const transporter = { verify: vi.fn(async () => true) };
+    const deps = {
+      resolveCredentials: vi.fn(() => ({ user: 'a@gmail.com', appPassword: 'pw', source: 'env' })),
+      resolveProfile: vi.fn(() => ({
+        name: 'scoped',
+        credentialsPath: '/h/.config/gmail-cli/credentials-scoped.json',
+        allowlistPath: '/h/.config/gmail-cli/allowlist-scoped.json',
+        sendLogPath: '/h/.config/gmail-cli/sent-scoped.jsonl',
+        fromName: null,
+        replyTo: null,
+        signature: null,
+        allowlistEnforce: true,
+        sendLog: {},
+        capabilities: caps,
+        legacy: false,
+        imap: {},
+      })),
+      createTransport: vi.fn(() => transporter),
+      loadAllowlist: allow(0),
+      createImapClient: vi.fn(() => makeImapClient()),
+    };
+    const out = await runDoctor({}, deps);
+    expect(out.mode).toBe('allow');
+    expect(out.capabilities).toContain('read');
   });
 });

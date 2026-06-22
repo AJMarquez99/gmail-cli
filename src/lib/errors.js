@@ -1,8 +1,9 @@
-// Exit-code scheme: 2 = user-fixable config, 3 = recipient blocked by the allowlist, 1 = everything else.
+// Exit-code scheme: 2 = user-fixable config, 3 = recipient blocked by the allowlist, 4 = capability denied, 1 = everything else.
 export const EXIT_CODES = {
   GENERIC: 1, // unexpected / SMTP / network failure
   CONFIG: 2, // user-fixable config (missing credentials, bad input)
   FORBIDDEN: 3, // recipient blocked by the allowlist policy
+  CAPABILITY_DENIED: 4, // profile lacks required capability
 };
 
 export class GmailError extends Error {
@@ -52,5 +53,17 @@ export class RecipientNotAllowedError extends GmailError {
       EXIT_CODES.FORBIDDEN,
     );
     this.denied = denied;
+  }
+}
+
+export class CapabilityDeniedError extends GmailError {
+  constructor(bucket, profileName) {
+    super(
+      `Profile "${profileName}" lacks the "${bucket}" capability for this command.\n` +
+        `Grant it with: gmail profile caps ${profileName} --allow ... (or adjust --deny).`,
+      EXIT_CODES.CAPABILITY_DENIED,
+    );
+    this.bucket = bucket;
+    this.profileName = profileName;
   }
 }

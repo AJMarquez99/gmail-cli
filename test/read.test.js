@@ -1,6 +1,9 @@
+import { join, resolve, sep } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { runReadList, runReadSearch, runReadShow, runReadThread } from '../src/commands/read.js';
+import { runReadList, runReadSearch, runReadShow, runReadThread, runReadCount, runReadDownload } from '../src/commands/read.js';
 import { buildProgram } from '../src/cli.js';
+import { resolveCapabilities } from '../src/capabilities.js';
+import { InvalidInputError } from '../src/lib/errors.js';
 
 // ---------------------------------------------------------------------------
 // Fake imap message factory
@@ -82,6 +85,7 @@ function makeDeps({ throwInOp = false, messages = {}, searchUids = [1] } = {}) {
       legacy: true,
       credentialsPath: '/credentials.json',
       imap: {},
+      capabilities: resolveCapabilities({}),
     })),
     resolveCredentials: vi.fn(() => ({ user: 'u@example.com', appPassword: 'pw' })),
     createImapClient: vi.fn(() => client),
@@ -332,5 +336,126 @@ describe('CLI integration — read list', () => {
       process.stdout.write = origWrite;
     }
     expect(deps._client.loggedOut).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runReadCount
+// ---------------------------------------------------------------------------
+
+describe('runReadCount', () => {
+  it('returns { mailbox, total, unread } via reader.countMessages', async () => {
+    const deps = makeDeps({ searchUids: [1, 2, 3] });
+    // reader.countMessages calls client.status() — add it to the fake client
+    deps._client.status = vi.fn(async () => ({ messages: 10, unseen: 3 }));
+
+    const result = await runReadCount({ mailbox: 'INBOX' }, deps);
+    expect(result).toHaveProperty('mailbox', 'INBOX');
+    expect(result).toHaveProperty('total', 10);
+    expect(result).toHaveProperty('unread', 3);
+    expect(deps._client.connected).toBe(true);
+    expect(deps._client.loggedOut).toBe(true);
+  });
+
+  it('calls connect() and logout()', async () => {
+    const deps = makeDeps({ searchUids: [1] });
+    deps._client.status = vi.fn(async () => ({ messages: 5, unseen: 1 }));
+    await runReadCount({ mailbox: 'INBOX' }, deps);
+    expect(deps._client.connected).toBe(true);
+    expect(deps._client.loggedOut).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runReadDownload
+// ---------------------------------------------------------------------------
+
+describe('runReadDownload', () => {
+  it('fetches raw message, parses it, writes each attachment, returns result', async () => {
+    const dir = '/tmp/out';
+    const content = Buffer.from('xx');
+    const deps = makeDeps({ messages: { 7: makeMsg(7) }, searchUids: [7] });
+    // Override parseMessage to return an attachment
+    deps.parseMessage = vi.fn(async () => ({
+      attachments: [{ filename: 'a.pdf', content, size: 2 }],
+    }));
+    deps.writeFile = vi.fn();
+    // Patch fetch so it yields the raw source for uid 7
+    deps._client.fetch = function () {
+      async function* gen() {
+        yield makeMsg(7);
+      }
+      return gen();
+    };
+
+    const result = await runReadDownload({ target: '7', mailbox: 'INBOX', dir }, deps);
+    expect(deps.writeFile).toHaveBeenCalledWith(resolve(dir, 'a.pdf'), content);
+    expect(result).toEqual({
+      uid: 7,
+      dir: resolve(dir),
+      attachments: [{ filename: 'a.pdf', bytes: 2, path: resolve(dir, 'a.pdf') }],
+    });
+    expect(deps._client.loggedOut).toBe(true);
+  });
+
+  it('returns empty attachments array when message has none', async () => {
+    const dir = '/tmp/out';
+    const deps = makeDeps({ messages: { 3: makeMsg(3) }, searchUids: [3] });
+    deps.parseMessage = vi.fn(async () => ({ attachments: [] }));
+    deps.writeFile = vi.fn();
+    deps._client.fetch = function () {
+      async function* gen() { yield makeMsg(3); }
+      return gen();
+    };
+
+    const result = await runReadDownload({ target: '3', mailbox: 'INBOX', dir }, deps);
+    expect(result.attachments).toEqual([]);
+    expect(deps.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('throws InvalidInputError when raw message is not found', async () => {
+    const deps = makeDeps({ messages: {}, searchUids: [] });
+    deps.parseMessage = vi.fn();
+    deps.writeFile = vi.fn();
+    // Override fetch to yield nothing
+    deps._client.fetch = function () {
+      async function* gen() { /* nothing */ }
+      return gen();
+    };
+
+    await expect(
+      runReadDownload({ target: '999', mailbox: 'INBOX', dir: '/tmp' }, deps),
+    ).rejects.toThrow(InvalidInputError);
+    expect(deps._client.loggedOut).toBe(true);
+  });
+
+  it('sanitizes path-traversal and absolute-path filenames to a basename inside dir', async () => {
+    const dir = '/tmp/out';
+    const outDir = resolve(dir);
+    const deps = makeDeps({ messages: { 8: makeMsg(8) }, searchUids: [8] });
+    deps.parseMessage = vi.fn(async () => ({
+      attachments: [
+        { filename: '../evil.txt', content: Buffer.from('a'), size: 1 },
+        { filename: '/tmp/evil.txt', content: Buffer.from('b'), size: 1 },
+      ],
+    }));
+    deps.writeFile = vi.fn();
+    deps._client.fetch = function () {
+      async function* gen() { yield makeMsg(8); }
+      return gen();
+    };
+
+    const result = await runReadDownload({ target: '8', mailbox: 'INBOX', dir }, deps);
+
+    // Every written path stays inside the resolved output dir and carries no `..` escape.
+    for (const [path] of deps.writeFile.mock.calls) {
+      expect(path.startsWith(outDir + sep)).toBe(true);
+      expect(path.includes(`..${sep}`)).toBe(false);
+    }
+    // Both traversal attempts collapse to the same in-dir basename.
+    expect(deps.writeFile).toHaveBeenCalledWith(join(outDir, 'evil.txt'), Buffer.from('a'));
+    expect(deps.writeFile).toHaveBeenCalledWith(join(outDir, 'evil.txt'), Buffer.from('b'));
+    expect(result.attachments.every((a) => a.filename === 'evil.txt')).toBe(true);
+    expect(result.attachments.every((a) => a.path.startsWith(outDir + sep))).toBe(true);
   });
 });

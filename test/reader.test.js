@@ -361,3 +361,14 @@ describe('listLabels', () => {
     expect(result[0].specialUse).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// countMessages
+// ---------------------------------------------------------------------------
+
+import { countMessages } from '../src/reader.js';
+
+it('countMessages returns total + unread from status', async () => {
+  const c = { status: async (m) => ({ messages: 12, unseen: 3, path: m }) };
+  expect(await countMessages(c, { mailbox: 'INBOX' })).toEqual({ mailbox: 'INBOX', total: 12, unread: 3 });
+});

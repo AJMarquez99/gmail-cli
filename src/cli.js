@@ -8,12 +8,18 @@ import { runLog } from './commands/log.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
-import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove } from './commands/profile.js';
-import { GmailError, EXIT_CODES } from './lib/errors.js';
-import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark } from './lib/format.js';
-import { runReadList, runReadSearch, runReadShow, runReadThread } from './commands/read.js';
-import { runLabelList, runLabelAdd, runLabelRemove } from './commands/label.js';
+import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
+import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
+import { requiredCapability, profileCan } from './capabilities.js';
+import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize, formatCount, formatDownload, formatReply, formatForward, formatRulesMutation, formatRulesList, formatRulesApply, formatRulesXml } from './lib/format.js';
+import { runReadList, runReadSearch, runReadShow, runReadThread, runReadCount, runReadDownload } from './commands/read.js';
+import { runLabelList, runLabelAdd, runLabelRemove, runLabelCreate, runLabelDelete, runLabelRename } from './commands/label.js';
 import { runMark } from './commands/mark.js';
+import { runWhoami } from './commands/whoami.js';
+import { runDraftCreate, runDraftDelete, runDraftSend } from './commands/draft.js';
+import { runArchive, runMove, runTrash, runDelete } from './commands/organize.js';
+import { runReply, runForward } from './commands/reply.js';
+import { runRulesAdd, runRulesList, runRulesRemove, runRulesApply, runRulesExportXml } from './commands/rules.js';
 
 const collect = (val, acc) => {
   acc.push(val);
@@ -26,6 +32,14 @@ async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
+}
+
+// Build the space-joined command path (excluding the root program name) for capability lookup.
+function commandPath(cmd) {
+  const parts = [];
+  let c = cmd;
+  while (c && c.parent) { parts.unshift(c.name()); c = c.parent; }
+  return parts.join(' ');
 }
 
 function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
@@ -43,6 +57,13 @@ function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
     // Propagate global --profile into opts so every handler sees opts.profile.
     if (opts.profile === undefined) opts.profile = globalOpts.profile;
     try {
+      const cap = requiredCapability(commandPath(cmd), opts);
+      if (cap) {
+        const profile = deps.resolveProfile(opts.profile);
+        if (!profileCan(profile, cap)) {
+          throw new CapabilityDeniedError(cap, profile.name);
+        }
+      }
       if (preprocess) await preprocess(opts);
       const result = await fn(opts, deps);
       if (globalOpts.format === 'table' && table) {
@@ -108,6 +129,11 @@ export function buildProgram(deps = defaultDeps) {
     .command('doctor')
     .description('Check credentials and verify Gmail SMTP + IMAP')
     .action(handle(runDoctor, { table: formatDoctor }, deps));
+
+  program
+    .command('whoami')
+    .description('Show the resolved profile, account, and capability scope')
+    .action(handle(runWhoami, { table: formatWhoami }, deps));
 
   program
     .command('init')
@@ -178,6 +204,12 @@ export function buildProgram(deps = defaultDeps) {
     .command('remove <name>')
     .description('Unregister a profile (its files are left on disk)')
     .action(handle(runProfileRemove, { table: formatProfileMutation, args: ['name'] }, deps));
+  profileCmd
+    .command('caps <name>')
+    .description("Show or set a profile's capability scope (allowlist or denylist)")
+    .option('--allow <buckets>', 'comma-separated buckets to allow (allowlist mode)')
+    .option('--deny <buckets>', 'comma-separated buckets to deny (denylist mode)')
+    .action(handle(runProfileCaps, { table: formatProfileCaps, args: ['name'] }, deps));
 
   const read = program.command('read').description('Read mail over IMAP');
   read
@@ -203,6 +235,13 @@ export function buildProgram(deps = defaultDeps) {
     .description('Show all messages in a thread')
     .option('--mailbox <name>', 'mailbox/label', '[Gmail]/All Mail')
     .action(handle(runReadThread, { table: formatThread, args: ['threadId'] }, deps));
+  read.command('count').description('Count total + unread messages in a mailbox')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .action(handle(runReadCount, { table: formatCount }, deps));
+  read.command('download <target>').description('Download a message\'s attachments to a directory')
+    .option('--mailbox <name>', 'mailbox/label', 'INBOX')
+    .option('--dir <path>', 'output directory', '.')
+    .action(handle(runReadDownload, { table: formatDownload, args: ['target'] }, deps));
 
   const label = program.command('label').description('Manage Gmail labels');
   label
@@ -219,14 +258,186 @@ export function buildProgram(deps = defaultDeps) {
     .description('Remove a label from a message')
     .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
     .action(handle(runLabelRemove, { table: formatLabelMutation, args: ['uid', 'name'] }, deps));
+  label
+    .command('create <name>')
+    .description('Create a new label')
+    .action(handle(runLabelCreate, { table: formatLabelMutation, args: ['name'] }, deps));
+  label
+    .command('delete <name>')
+    .description('Delete a label')
+    .action(handle(runLabelDelete, { table: formatLabelMutation, args: ['name'] }, deps));
+  label
+    .command('rename <name> <newName>')
+    .description('Rename a label')
+    .action(handle(runLabelRename, { table: formatLabelMutation, args: ['name', 'newName'] }, deps));
 
   program
     .command('mark <uid>')
-    .description('Mark a message read or unread')
+    .description('Mark a message read, unread, starred, or important')
     .option('--read', 'mark as read')
     .option('--unread', 'mark as unread')
+    .option('--star', 'star the message')
+    .option('--unstar', 'remove star from the message')
+    .option('--important', 'mark as important')
+    .option('--unimportant', 'remove important flag from the message')
     .option('--mailbox <name>', 'mailbox', 'INBOX')
     .action(handle(runMark, { table: formatMark, args: ['uid'] }, deps));
+
+  const draft = program.command('draft').description('Manage email drafts');
+  draft
+    .command('create')
+    .description('Save a new draft to the Drafts mailbox (no allowlist — nothing is sent)')
+    .option('--to <addr>', 'recipient (repeatable; comma-separated ok)', collect, [])
+    .option('--cc <addr>', 'cc recipient (repeatable)', collect, [])
+    .option('--bcc <addr>', 'bcc recipient (repeatable)', collect, [])
+    .option('--subject <text>', 'subject line')
+    .option('--body <text>', 'plain-text body (or pipe it on stdin)')
+    .option('--html <html>', 'HTML body')
+    .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
+    .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
+    .option('--reply-to <addr>', 'Reply-To address')
+    .option('--from-name <name>', 'display name on the From header')
+    .option('--in-reply-to <messageId>', 'Message-ID this draft replies to (threads it)')
+    .option('--references <id>', 'References header id (repeatable; comma-separated ok)', collect, [])
+    .option('--no-signature', 'do not append the configured signature')
+    .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
+    .action(
+      handle(
+        runDraftCreate,
+        {
+          table: formatDraft,
+          // If no body/html given, fall back to piped stdin.
+          preprocess: async (opts) => {
+            if (!opts.body && !opts.html) {
+              const piped = await readStdin();
+              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
+            }
+          },
+        },
+        deps,
+      ),
+    );
+  draft
+    .command('delete <uid>')
+    .description('Discard a draft by UID')
+    .action(handle(runDraftDelete, { table: formatDraft, args: ['uid'] }, deps));
+  draft
+    .command('send <uid>')
+    .description('Send a draft by UID (enforces the allowlist; transmits, then deletes the draft)')
+    .option('--no-allowlist', 'disable the recipient allowlist for this send')
+    .option('--no-log', 'do not append this send to the send log')
+    .action(handle(runDraftSend, { table: formatDraft, args: ['uid'] }, deps));
+
+  program
+    .command('reply <uid>')
+    .description('Reply to a message by UID (threaded; --all for reply-all; --draft to stage instead of send)')
+    .option('--body <text>', 'reply body (or pipe it on stdin)')
+    .option('--html <html>', 'HTML body')
+    .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
+    .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
+    .option('--all', 'reply-all: cc all original recipients minus self')
+    .option('--no-quote', 'do not quote the original message body')
+    .option('--draft', 'stage as a draft instead of sending')
+    .option('--from-name <name>', 'display name on the From header')
+    .option('--no-signature', 'do not append the configured signature')
+    .option('--attach <path>', 'file attachment (repeatable; comma-separated ok)', collect, [])
+    .option('--no-allowlist', 'disable the recipient allowlist for this send')
+    .option('--no-log', 'do not append this send to the send log')
+    .option('--mailbox <name>', 'source mailbox to fetch the message from', 'INBOX')
+    .action(
+      handle(
+        runReply,
+        {
+          table: formatReply,
+          args: ['uid'],
+          preprocess: async (opts) => {
+            if (!opts.body && !opts.html) {
+              const piped = await readStdin();
+              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
+            }
+          },
+        },
+        deps,
+      ),
+    );
+
+  program
+    .command('forward <uid>')
+    .description('Forward a message by UID, re-attaching the original attachments')
+    .option('--to <addr>', 'recipient (repeatable; comma-separated ok)', collect, [])
+    .option('--body <text>', 'optional intro before the forwarded message (or pipe it on stdin)')
+    .option('--markdown', 'render the body (or stdin) as Markdown → HTML, with a plaintext fallback')
+    .option('--no-style', 'with --markdown, skip the inline email styler (raw marked HTML)')
+    .option('--from-name <name>', 'display name on the From header')
+    .option('--no-signature', 'do not append the configured signature')
+    .option('--no-allowlist', 'disable the recipient allowlist for this send')
+    .option('--no-log', 'do not append this send to the send log')
+    .option('--mailbox <name>', 'source mailbox to fetch the message from', 'INBOX')
+    .action(
+      handle(
+        runForward,
+        {
+          table: formatForward,
+          args: ['uid'],
+          preprocess: async (opts) => {
+            if (!opts.body) {
+              const piped = await readStdin();
+              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
+            }
+          },
+        },
+        deps,
+      ),
+    );
+
+  const rules = program.command('rules').description('Local rules engine: define, apply, export to Gmail filter XML');
+  rules
+    .command('add')
+    .description('Define a rule (match → actions). Always allowed; applying is gated.')
+    .option('--match <query>', 'Gmail search query (gmraw) the rule matches')
+    .option('--id <id>', 'stable rule id (default: slug of the match)')
+    .option('--label <name>', 'add a label')
+    .option('--archive', 'archive (remove from inbox)')
+    .option('--mark <state>', 'mark state (read)')
+    .option('--star', 'star the message')
+    .option('--important', 'mark important')
+    .option('--move <mailbox>', 'move to a mailbox/label')
+    .option('--trash', 'move to Trash (requires the delete capability to apply)')
+    .option('--mailbox <name>', 'mailbox to search when applying', 'INBOX')
+    .action(handle(runRulesAdd, { table: formatRulesMutation }, deps));
+  rules
+    .command('list')
+    .description('List defined rules')
+    .action(handle(runRulesList, { table: formatRulesList }, deps));
+  rules
+    .command('remove <id>')
+    .description('Remove a rule by id')
+    .action(handle(runRulesRemove, { table: formatRulesMutation, args: ['id'] }, deps));
+  rules
+    .command('apply')
+    .description('Apply rules now over IMAP (organize baseline + per-action capability checks)')
+    .option('--dry-run', 'report what would change without mutating')
+    .option('--rule <id>', 'apply only this rule')
+    .option('--limit <n>', 'cap matched messages per rule')
+    .action(handle(runRulesApply, { table: formatRulesApply }, deps));
+  rules
+    .command('export-xml')
+    .description('Emit Gmail filter import XML (Settings → Filters → Import) to stdout')
+    .action(handle(runRulesExportXml, { table: formatRulesXml }, deps));
+
+  program.command('archive <uid>').description('Archive a message (remove it from the inbox)')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runArchive, { table: formatOrganize, args: ['uid'] }, deps));
+  program.command('move <uid> <destination>').description('Move a message to another mailbox/label')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runMove, { table: formatOrganize, args: ['uid', 'destination'] }, deps));
+  program.command('trash <uid>').description('Move a message to Trash (recoverable)')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runTrash, { table: formatOrganize, args: ['uid'] }, deps));
+  program.command('delete <uid>').description('Permanently delete a message (requires --permanent)')
+    .option('--permanent', 'confirm permanent, irreversible deletion')
+    .option('--mailbox <name>', 'mailbox the message is in', 'INBOX')
+    .action(handle(runDelete, { table: formatOrganize, args: ['uid'] }, deps));
 
   return program;
 }

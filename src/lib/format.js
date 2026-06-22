@@ -13,15 +13,19 @@ export function formatSend(result) {
 }
 
 export function formatDoctor(result) {
+  const capList = result.capabilities && result.capabilities.length
+    ? result.capabilities.join(', ')
+    : '(none)';
   const lines = [
-    `status:      ${result.ok ? 'ok' : 'FAILED'}`,
-    `profile:     ${result.profile || '(default)'}`,
-    `account:     ${result.user || '(none)'}`,
-    `source:      ${result.source || '(none)'}`,
-    `credentials: ${result.credentials}`,
-    `smtp:        ${result.smtp}`,
-    `imap:        ${result.imap}`,
-    `allowlist:   ${result.allowlist} recipient(s) — ${result.allowlistEnforced ? 'enforced' : 'DISABLED'}`,
+    `status:       ${result.ok ? 'ok' : 'FAILED'}`,
+    `profile:      ${result.profile || '(default)'}`,
+    `account:      ${result.user || '(none)'}`,
+    `source:       ${result.source || '(none)'}`,
+    `credentials:  ${result.credentials}`,
+    `smtp:         ${result.smtp}`,
+    `imap:         ${result.imap}`,
+    `allowlist:    ${result.allowlist} recipient(s) — ${result.allowlistEnforced ? 'enforced' : 'DISABLED'}`,
+    `capabilities: ${result.mode || 'unrestricted'} → ${capList}`,
   ];
   if (result.error) lines.push('', result.error);
   return lines.join('\n');
@@ -100,6 +104,10 @@ export function formatProfileList(r) {
   return r.profiles
     .map((p) => `${p.name}${p.default ? ' (default)' : ''}`)
     .join('\n');
+}
+
+export function formatProfileCaps(r) {
+  return `profile ${r.name}: ${r.mode} → ${r.capabilities.join(', ') || '(none)'}`;
 }
 
 export function formatProfileMutation(r) {
@@ -200,11 +208,76 @@ export function formatLabelList(r) {
 }
 
 /**
- * Format the result of a label add/remove mutation.
+ * Format the result of a label add/remove/create/delete/rename mutation.
  */
 export function formatLabelMutation(r) {
+  if (r.action === 'created') return `created label "${r.name}"`;
+  if (r.action === 'deleted') return `deleted label "${r.name}"`;
+  if (r.action === 'renamed') return `renamed label "${r.from}" → "${r.to}"`;
+  // add/remove
   const direction = r.action === 'added' ? 'to' : 'from';
   return `${r.action} label "${r.label}" ${direction} message ${r.uid}`;
+}
+
+export function formatWhoami(r) {
+  return [
+    `profile:      ${r.profile}`,
+    `account:      ${r.account || '(no credentials)'}`,
+    `mode:         ${r.mode}`,
+    `capabilities: ${r.capabilities.join(', ')}`,
+  ].join('\n');
+}
+
+export function formatDraft(r) {
+  const verb = { 'draft-created': 'created', 'draft-deleted': 'deleted', 'draft-sent': 'sent' }[r.action] || r.action;
+  return `draft ${verb} (uid ${r.uid}) → ${(r.to || []).join(', ')} · ${r.subject}`;
+}
+
+export function formatOrganize(r) {
+  if (r.action === 'moved') return `moved uid ${r.uid}: ${r.from} → ${r.to}`;
+  return `${r.action} uid ${r.uid}`;
+}
+
+export function formatCount(r) { return `${r.mailbox}: ${r.total} total, ${r.unread} unread`; }
+
+export function formatDownload(r) {
+  return r.attachments.length
+    ? `downloaded ${r.attachments.length} attachment(s) → ${r.dir}:\n` + r.attachments.map((a) => `  ${a.filename} (${a.bytes}b)`).join('\n')
+    : `no attachments on uid ${r.uid}`;
+}
+
+export function formatReply(r) {
+  const verb = r.action === 'reply-drafted' ? 'drafted reply' : 'replied';
+  return `${verb} → ${(r.to || []).join(', ')}${r.cc && r.cc.length ? ' (cc ' + r.cc.join(', ') + ')' : ''} · ${r.subject}`;
+}
+
+export function formatForward(r) {
+  return `forwarded → ${(r.to || []).join(', ')} · ${r.subject}` + (r.attachments && r.attachments.length ? ` (+${r.attachments.length} attachment(s))` : '');
+}
+
+export function formatRulesMutation(r) {
+  return `${r.action} rule "${r.id}"`;
+}
+
+export function formatRulesList(r) {
+  if (!r.rules.length) return 'no rules defined';
+  return r.rules
+    .map((x) => `${x.id}: [${x.match}] → ${x.actions.join(', ')}${x.mailbox && x.mailbox !== 'INBOX' ? ` (in ${x.mailbox})` : ''}`)
+    .join('\n');
+}
+
+export function formatRulesApply(r) {
+  const head = r.dryRun ? '(dry-run) ' : '';
+  const lines = r.rules.map((e) => {
+    const skipped = e.skipped.length ? `, ${e.skipped.length} skipped` : '';
+    const errors = e.errors.length ? `, ${e.errors.length} error(s)` : '';
+    return `${head}${e.id}: ${e.matched} matched, ${e.applied.length} action(s) applied${skipped}${errors}`;
+  });
+  return lines.join('\n') || `${head}no rules applied`;
+}
+
+export function formatRulesXml(r) {
+  return r.xml;
 }
 
 export function formatDryRun(r) {
