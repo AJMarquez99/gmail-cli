@@ -72,8 +72,8 @@ const mkClient = (uids) => {
     logout: vi.fn(async () => {}),
     mailboxOpen: async (m) => calls.push(['open', m]),
     search: async (q, o) => { calls.push(['search', q, o]); return uids; },
-    messageFlagsRemove: async (u, f, o) => calls.push(['remove', Number(u), f, o]),
-    messageMove: async (u, d, o) => calls.push(['move', Number(u), d, o]),
+    messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
+    messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
   };
 };
 

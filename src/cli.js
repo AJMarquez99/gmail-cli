@@ -34,6 +34,14 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// Fallback: if no body/html was given, use piped stdin as the body.
+const stdinBodyPreprocess = async (opts) => {
+  if (!opts.body && !opts.html) {
+    const piped = await readStdin();
+    if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
+  }
+};
+
 // Build the space-joined command path (excluding the root program name) for capability lookup.
 function commandPath(cmd) {
   const parts = [];
@@ -82,7 +90,7 @@ export function buildProgram(deps = defaultDeps) {
   const program = new Command();
   program
     .name('gmail')
-    .description('Gmail CLI — send + IMAP read, with a fail-closed recipient allowlist')
+    .description('Gmail CLI — send, read, compose, organize, and rules, with a fail-closed recipient allowlist')
     .version(VERSION)
     .option('--format <format>', 'output format: json|table', 'json')
     .option('--profile <name>', 'account profile to use');
@@ -113,13 +121,7 @@ export function buildProgram(deps = defaultDeps) {
         runSend,
         {
           table: (r) => (r.dryRun ? formatDryRun(r) : formatSend(r)),
-          // If no body/html given, fall back to piped stdin.
-          preprocess: async (opts) => {
-            if (!opts.body && !opts.html) {
-              const piped = await readStdin();
-              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
-            }
-          },
+          preprocess: stdinBodyPreprocess,
         },
         deps,
       ),
@@ -306,13 +308,7 @@ export function buildProgram(deps = defaultDeps) {
         runDraftCreate,
         {
           table: formatDraft,
-          // If no body/html given, fall back to piped stdin.
-          preprocess: async (opts) => {
-            if (!opts.body && !opts.html) {
-              const piped = await readStdin();
-              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
-            }
-          },
+          preprocess: stdinBodyPreprocess,
         },
         deps,
       ),
@@ -350,12 +346,7 @@ export function buildProgram(deps = defaultDeps) {
         {
           table: formatReply,
           args: ['uid'],
-          preprocess: async (opts) => {
-            if (!opts.body && !opts.html) {
-              const piped = await readStdin();
-              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
-            }
-          },
+          preprocess: stdinBodyPreprocess,
         },
         deps,
       ),
@@ -379,12 +370,7 @@ export function buildProgram(deps = defaultDeps) {
         {
           table: formatForward,
           args: ['uid'],
-          preprocess: async (opts) => {
-            if (!opts.body) {
-              const piped = await readStdin();
-              if (piped.trim()) opts.body = piped.replace(/\n+$/, '');
-            }
-          },
+          preprocess: stdinBodyPreprocess,
         },
         deps,
       ),

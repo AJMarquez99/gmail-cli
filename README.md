@@ -9,7 +9,9 @@ A Gmail CLI with a fail-closed recipient allowlist.
 Sends over Gmail SMTP and reads over Gmail IMAP, both using an **App Password** — no OAuth, no
 service accounts. `gmail read show` surfaces the Message-ID of any message, which you can pass
 directly to `gmail send --in-reply-to` for a full read-and-reply loop from the terminal or an
-agent — no external connector needed.
+agent — no external connector needed. v1.0.0 adds draft/reply/forward composition, organize
+actions (archive, move, trash, label management), a local rules engine with Gmail filter export,
+and per-profile capability scoping.
 
 ## Install
 
@@ -323,6 +325,70 @@ gmail config set allowlist.enforce false
 
 The `--no-allowlist` flag overrides the config for a single send regardless of what the config says. To re-enable, run `gmail config set allowlist.enforce true` (or `gmail config unset allowlist.enforce`) and drop `--no-allowlist`.
 
+## Permissions & capabilities
+
+Each profile can be scoped to a least-privilege set of **capabilities** — so you can attach, say, a
+business email that may *read, organize, and draft* but can **never send**. Scoping is fail-closed
+and layered on top of the recipient allowlist.
+
+### The five buckets
+
+| Bucket | Grants |
+|---|---|
+| `read` | `read list/search/show/thread/count/download`, `label list` |
+| `organize` | `label add/remove`, `label create/delete/rename`, `mark` (read/star/important), `archive`, `move`, `rules apply` |
+| `draft` | `draft create`, `draft delete`, `reply --draft` |
+| `send` | `send`, `reply`, `forward`, `draft send` |
+| `delete` | `trash`, `delete` |
+
+Always-allowed (never gated): `init`, `login`, `doctor`, `config`, `profile`, `allow`, `whoami`,
+`log`, and `rules add/list/remove/export-xml` (defining or exporting rules never touches the mailbox
+— only `rules apply` does).
+
+### Allowlist vs denylist (pick one)
+
+Configure a profile with **either** an allowlist or a denylist — never both:
+
+```jsonc
+// allowlist (recommended): only the listed buckets are granted, fail-closed on growth
+"business": { "capabilities": ["read", "organize", "draft"] }
+
+// denylist: everything except the listed buckets
+"vendor":   { "deny": ["send", "delete"] }
+```
+
+- **Absent both keys → unrestricted** (full back-compat; existing and legacy single-account configs
+  are unaffected, no migration needed).
+- **Both keys present → config error** (exit `2`).
+- An unknown bucket name → config error (exit `2`).
+
+### Managing & inspecting
+
+```bash
+# Set a profile's scope (writes config.json; validates buckets)
+gmail profile caps business --allow read,organize,draft
+gmail profile caps vendor --deny send,delete
+# Show the current effective scope
+gmail profile caps business
+
+# Show the resolved profile, account, mode, and granted buckets
+gmail whoami
+
+# doctor also prints each profile's capabilities alongside SMTP/IMAP/allowlist checks
+gmail doctor
+```
+
+A command whose bucket the active profile lacks is rejected **before it runs** with exit code `4`
+(CAPABILITY_DENIED) — distinct from `3` (recipient blocked by the allowlist), so agents can branch on
+which boundary stopped them.
+
+### The transmission boundary
+
+The allowlist is enforced **only at the moment of transmission** (`send`, `draft send`, a real
+`reply`/`forward`) — never on draft creation or `reply --draft`. So a `send`-denied,
+`draft`-capable profile can compose and stage outreach for human review but physically cannot
+transmit it.
+
 ## Usage
 
 Output is JSON by default; add `--format table` for a human-readable summary.
@@ -380,6 +446,165 @@ gmail log
 gmail sent --limit 5
 ```
 
+## Compose: draft, reply, forward
+
+### Drafts
+
+```bash
+# Create a draft (same flags as `gmail send`): saved to [Gmail]/Drafts. No allowlist check —
+# nothing is transmitted, so a send-denied profile can still draft.
+gmail draft create --to alice@example.com --subject "Proposal" --body "Draft for review"
+
+# Send a stored draft by UID: enforces the allowlist, transmits, then deletes the draft and logs it.
+gmail draft send 42
+
+# Discard a draft by UID
+gmail draft delete 42
+```
+
+> There is no `draft list`/`draft show` — use `gmail read list --mailbox '[Gmail]/Drafts'` and
+> `gmail read show <uid> --mailbox '[Gmail]/Drafts'`.
+
+**Notes:** `draft send` transmits to the recipients stored in the draft **at create time** (editing
+the draft elsewhere is honored; the allowlist is checked against those stored recipients on send). A
+`Bcc` saved into a draft is not visible in Gmail's draft UI but **is** sent when the draft is sent.
+
+### Reply
+
+```bash
+# Threaded reply by UID (sets In-Reply-To/References, derives the Re: subject and recipient).
+# Quotes the original by default. Body via flag or stdin.
+gmail reply 17 --body "Sounds good — shipping today."
+
+# Reply-all (cc all original recipients minus yourself)
+gmail reply 17 --all --body "Looping everyone in."
+
+# Stage the reply as a draft instead of sending (capability: draft, not send)
+gmail reply 17 --draft --body "Hold for review"
+
+# Suppress the quoted original
+gmail reply 17 --no-quote --body "..."
+```
+
+`reply` is `send` by default and `draft` with `--draft` (a dynamic capability). Other flags:
+`--html`, `--markdown`/`--no-style`, `--from-name`, `--no-signature`, `--attach`, `--no-allowlist`,
+`--no-log`, `--mailbox` (source mailbox, default `INBOX`).
+
+### Forward
+
+```bash
+# Forward a message, re-attaching the original attachments; --to is required.
+gmail forward 17 --to bob@example.com --body "FYI — see below."
+```
+
+Flags: `--to` (repeatable/comma-separated), `--body` (optional intro), `--markdown`/`--no-style`,
+`--from-name`, `--no-signature`, `--no-allowlist`, `--no-log`, `--mailbox`.
+
+## Organize
+
+```bash
+# Archive (remove from inbox; keeps the message in All Mail)
+gmail archive 17
+
+# Move to another mailbox/label
+gmail move 17 "Saved"
+
+# Star / important toggles (alongside --read/--unread)
+gmail mark 17 --star          # or --unstar
+gmail mark 17 --important     # or --unimportant
+
+# Label taxonomy management
+gmail label create "Outreach/Acme"
+gmail label rename "Outreach/Acme" "Clients/Acme"
+gmail label delete "Clients/Acme"
+
+# Counts + attachment download
+gmail read count --mailbox INBOX
+gmail read download 17 --dir ./attachments
+
+# Trash (recoverable) vs permanent delete
+gmail trash 17
+gmail delete 17 --permanent    # refuses without --permanent; points you to `trash`
+```
+
+`mark` requires exactly one action flag. `archive`/`move`/`mark`/`label create|delete|rename` need
+the `organize` capability; `trash`/`delete` need `delete`; `read count`/`read download` need `read`. **Permanent `delete` always requires
+`--permanent`** on top of the `delete` capability — there is no interactive confirmation (it would
+not fit the JSON/agentic model), so `--permanent` is the explicit intent guard.
+
+## Rules engine (local filters)
+
+A stateless, App-Password-only rules engine: define `match → actions` rules per profile, then
+**apply them on demand** over IMAP (pair with `cron` or a loop for cadence). It is *not* a
+server-side filter — it only runs when you invoke it — but you can also **export importable Gmail
+filter XML** for true always-on server-side rules.
+
+### Define rules
+
+```bash
+# Add a rule (always allowed — defining a rule never touches the mailbox)
+gmail rules add --match "from:acme.com newer_than:7d" --label "Outreach/Acme" --archive
+
+# With a custom id, star + mark read, or move/trash
+gmail rules add --match "from:newsletter@x.com" --id news --mark read --star
+gmail rules add --match "subject:invoice" --move "Finance"
+gmail rules add --match "from:spammy.example" --trash
+
+gmail rules list
+gmail rules remove news
+```
+
+Rules live in `rules-{profile}.json` (default `~/.config/gmail-cli/rules.json`; override with
+`GMAIL_RULES`):
+
+```jsonc
+{
+  "rules": [
+    {
+      "id": "outreach-acme",
+      "match": "from:acme.com newer_than:7d",   // Gmail search query (same syntax as read/search)
+      "actions": ["label:Outreach/Acme", "archive"],
+      "mailbox": "INBOX"                          // search scope
+    }
+  ]
+}
+```
+
+Actions: `label:<name>`, `unlabel:<name>`, `archive`, `mark:read`, `star`, `important`,
+`move:<mailbox>`, `trash`. **Rules cannot permanently delete** — `trash` (recoverable) is the only
+destructive action.
+
+### Apply rules
+
+```bash
+# Apply all rules now (gated: needs the `organize` capability)
+gmail rules apply
+
+# Preview without mutating anything
+gmail rules apply --dry-run
+
+# Apply only one rule, and/or cap matches per rule
+gmail rules apply --rule outreach-acme --limit 50
+```
+
+`rules apply` is gated by the `organize` capability as a baseline, **plus per-action checks**: an
+action whose bucket the profile lacks (e.g. a `trash` action under a profile without `delete`) is
+**skipped and reported**, not executed. Apply is idempotent (re-running is safe; there is no state
+file). A non-positive or non-numeric `--limit` is ignored (no cap).
+
+### Export to Gmail filters
+
+```bash
+# Emit Gmail "Settings → Filters → Import" XML, then import it once by hand in the Gmail UI
+gmail rules export-xml --format table > filters.xml
+```
+
+The `match` query maps to Gmail's **"Has the words"** criterion; `archive`/`mark:read`/`star`/
+`important`/`trash` map to the corresponding filter properties; `move:<mbox>` maps to label +
+archive. **Caveats:** Gmail filters act on *incoming* mail going forward (not your existing inbox);
+relative-date operators like `newer_than` behave differently server-side; `unlabel` has no
+server-side equivalent and is omitted from the export.
+
 ## Commands
 
 | Command | Description |
@@ -387,15 +612,29 @@ gmail sent --limit 5
 | `gmail init` | Scaffold `~/.config/gmail-cli/` (allowlist.json + config.json) and print setup steps. |
 | `gmail login` | Guided credential setup — prompts for email and App Password (hidden), writes credentials.json at chmod 600. |
 | `gmail send` | Send an email (text/HTML/Markdown, to/cc/bcc, attachments, threading, dry-run). Enforces the allowlist. |
+| `gmail draft create` | Save a new draft to Drafts (same flags as `send`; no allowlist — nothing is sent). |
+| `gmail draft send <uid>` | Send a stored draft (enforces the allowlist), then delete it. |
+| `gmail draft delete <uid>` | Discard a draft by UID. |
+| `gmail reply <uid>` | Threaded reply (`--all`, `--no-quote`, `--draft`). Enforces the allowlist on send. |
+| `gmail forward <uid> --to <addr>` | Forward a message, re-attaching original attachments. |
 | `gmail doctor` | Check credentials, verify Gmail SMTP and IMAP connections, report allowlist size. |
 | `gmail read list` | List recent messages (newest first). Options: `--mailbox`, `--limit`, `--unread`. |
 | `gmail read search <query>` | Search with a Gmail query string (same syntax as the Gmail search box). Options: `--mailbox`, `--limit`. |
 | `gmail read show <uid\|message-id>` | Show a full message by UID or Message-ID. Options: `--mailbox`. (HTML body is in the `html` field of `--format json` output.) |
 | `gmail read thread <thread-id>` | Show all messages in a thread (oldest first). Options: `--mailbox`. |
+| `gmail read count` | Count total + unread messages in a mailbox. Options: `--mailbox`. |
+| `gmail read download <target>` | Download a message's attachments to a directory. Options: `--mailbox`, `--dir`. |
+| `gmail archive <uid>` | Archive a message (remove it from the inbox). Options: `--mailbox`. |
+| `gmail move <uid> <destination>` | Move a message to another mailbox/label. Options: `--mailbox`. |
+| `gmail trash <uid>` | Move a message to Trash (recoverable). Options: `--mailbox`. |
+| `gmail delete <uid> --permanent` | Permanently delete a message (requires `--permanent`). Options: `--mailbox`. |
 | `gmail label list` | List all labels/folders on the account. |
 | `gmail label add <uid> <name>` | Add a label to a message by UID. Options: `--mailbox`. |
 | `gmail label remove <uid> <name>` | Remove a label from a message by UID. Options: `--mailbox`. |
-| `gmail mark <uid> --read\|--unread` | Mark a message as read or unread. Options: `--mailbox`. Exactly one of `--read` or `--unread` is required. |
+| `gmail label create <name>` | Create a new label. |
+| `gmail label delete <name>` | Delete a label. |
+| `gmail label rename <name> <newName>` | Rename a label. |
+| `gmail mark <uid> --read\|--unread\|--star\|--unstar\|--important\|--unimportant` | Mark a message. Options: `--mailbox`. Exactly one action flag is required. |
 | `gmail allow list` | List allowed recipients and their aliases (read-only). |
 | `gmail allow add <email>` | Add a recipient to the allowlist (idempotent; merges aliases if entry already exists). |
 | `gmail allow remove <email\|alias>` | Remove a recipient by email address or alias. |
@@ -407,8 +646,15 @@ gmail sent --limit 5
 | `gmail profile list` | List all profiles, marking the default. |
 | `gmail profile use <name>` | Set a profile as the default. |
 | `gmail profile remove <name>` | Unregister a profile from config (files left on disk). |
+| `gmail profile caps <name>` | Show or set a profile's capability scope (`--allow b,b` or `--deny b,b`). |
+| `gmail whoami` | Show the resolved profile, account, capability mode, and granted buckets. |
+| `gmail rules add` | Define a rule (`--match` + actions: `--label/--archive/--mark read/--star/--important/--move/--trash`). Always allowed. |
+| `gmail rules list` | List defined rules. |
+| `gmail rules remove <id>` | Remove a rule by id. |
+| `gmail rules apply` | Apply rules over IMAP (`--dry-run`, `--rule <id>`, `--limit <n>`). Gated: `organize` + per-action checks. |
+| `gmail rules export-xml` | Emit importable Gmail filter XML to stdout. Always allowed. |
 
-Exit codes: `0` ok · `1` send/network failure · `2` user-fixable config (missing creds, no recipients, bad attachment) · `3` recipient blocked by allowlist.
+Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` recipient blocked by allowlist · `4` capability denied (command's bucket not granted to the profile).
 
 `--dry-run` always exits `0` (even if recipients would be blocked — denials are reported in the output, not the exit code).
 
@@ -530,6 +776,7 @@ gmail log --limit 5 # show last 5
 | `GMAIL_CLI_SETTINGS` | Path to non-secret config JSON (default: `~/.config/gmail-cli/config.json`) |
 | `GMAIL_SEND_LOG` | Path to sent-mail JSONL log (default: `~/.config/gmail-cli/sent.jsonl`) |
 | `GMAIL_ALLOWLIST` | Path to allowlist JSON (default: `~/.config/gmail-cli/allowlist.json`) |
+| `GMAIL_RULES` | Path to the rules JSON (default: `~/.config/gmail-cli/rules.json`; per-profile: `rules-{name}.json`) |
 
 ## Security notes
 

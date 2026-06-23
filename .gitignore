@@ -6,6 +6,8 @@ credentials.json
 config.json
 allowlist.json
 sent.jsonl
+rules.json
+rules-*.json
 *.local
 .DS_Store
 

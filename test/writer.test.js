@@ -298,3 +298,75 @@ it('createLabel/deleteLabel/renameLabel call the mailbox ops', async () => {
   expect(await renameLabel(c, { name: 'X', newName: 'Y' })).toEqual({ from: 'X', to: 'Y', action: 'renamed' });
   expect(c.calls).toEqual([['create', 'X'], ['delete', 'X'], ['rename', 'X', 'Y']]);
 });
+
+// ---------------------------------------------------------------------------
+// Batch UID array support
+// A separate stub that records the raw value (no Number() coercion) so we can
+// assert the comma-joined IMAP sequence set passed to imapflow.
+// ---------------------------------------------------------------------------
+
+const mkBatchClient = () => {
+  const calls = [];
+  return { calls,
+    mailboxOpen: async (m) => calls.push(['open', m]),
+    messageFlagsAdd: async (u, f, o) => calls.push(['add', u, f, o]),
+    messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
+    messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
+  };
+};
+
+describe('batch UID array support', () => {
+  it('addLabel passes comma-joined range and returns uid array', async () => {
+    const c = mkBatchClient();
+    const r = await addLabel(c, { uid: [5, 6], label: 'X', mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['add', '5,6', ['X'], { uid: true, useLabels: true }]);
+    expect(r).toEqual({ uid: [5, 6], label: 'X', action: 'added' });
+  });
+
+  it('removeLabel passes comma-joined range and returns uid array', async () => {
+    const c = mkBatchClient();
+    const r = await removeLabel(c, { uid: [5, 6], label: 'X', mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['remove', '5,6', ['X'], { uid: true, useLabels: true }]);
+    expect(r).toEqual({ uid: [5, 6], label: 'X', action: 'removed' });
+  });
+
+  it('archiveMessage passes comma-joined range and returns uid array', async () => {
+    const c = mkBatchClient();
+    const r = await archiveMessage(c, { uid: [5, 6] });
+    expect(c.calls).toContainEqual(['remove', '5,6', ['\\Inbox'], { uid: true, useLabels: true }]);
+    expect(r).toEqual({ uid: [5, 6], mailbox: 'INBOX', action: 'archived' });
+  });
+
+  it('moveMessage passes comma-joined range and returns uid array', async () => {
+    const c = mkBatchClient();
+    const r = await moveMessage(c, { uid: [5, 6], destination: 'Saved' });
+    expect(c.calls).toContainEqual(['move', '5,6', 'Saved', { uid: true }]);
+    expect(r).toEqual({ uid: [5, 6], from: 'INBOX', to: 'Saved', action: 'moved' });
+  });
+
+  it('trashMessage passes comma-joined range and returns uid array', async () => {
+    const c = mkBatchClient();
+    const r = await trashMessage(c, { uid: [5, 6] });
+    expect(c.calls).toContainEqual(['move', '5,6', TRASH, { uid: true }]);
+    expect(r.uid).toEqual([5, 6]);
+  });
+
+  it('starMessage (on:true) passes comma-joined range and returns uid array', async () => {
+    const c = mkBatchClient();
+    await starMessage(c, { uid: [5, 6], on: true, mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['add', '5,6', ['\\Starred'], { uid: true, useLabels: true }]);
+  });
+
+  it('importantMessage (on:true) passes comma-joined range', async () => {
+    const c = mkBatchClient();
+    await importantMessage(c, { uid: [5, 6], on: true, mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['add', '5,6', ['\\Important'], { uid: true, useLabels: true }]);
+  });
+
+  it('markMessage (seen:true) passes comma-joined range and returns uid array', async () => {
+    const c = mkBatchClient();
+    const r = await markMessage(c, { uid: [5, 6], seen: true, mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['add', '5,6', ['\\Seen'], { uid: true }]);
+    expect(r.uid).toEqual([5, 6]);
+  });
+});

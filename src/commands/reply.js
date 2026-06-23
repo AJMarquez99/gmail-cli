@@ -13,8 +13,11 @@ function quoteText(orig) {
   return `On a previous message, ${who} wrote:\n` + body.split('\n').map((l) => `> ${l}`).join('\n');
 }
 
-/** Build the reply message object (no transmit/stage). Shared by send + draft paths. */
-async function buildReply(opts, deps, profile, creds) {
+/**
+ * Derive reply recipients and build the synthetic opts (subject, inReplyTo, references, body).
+ * Does NOT build the nodemailer message — callers do that after resolving recipients.
+ */
+async function deriveReply(opts, deps, profile, creds) {
   const raw = await withClient(opts, deps, async (client) =>
     fetchRawMessage(client, { uid: opts.uid, mailbox: opts.mailbox }));
   if (!raw) throw new InvalidInputError(`No message found at uid ${opts.uid} in ${opts.mailbox || 'INBOX'}.`);
@@ -42,16 +45,17 @@ async function buildReply(opts, deps, profile, creds) {
     body = (body ? `${body}\n\n` : '') + quoteText(orig);
   }
   const synthetic = { ...opts, subject, inReplyTo: orig.messageId, references, body };
-  const { message } = buildMessage({ to, cc, bcc: [] }, synthetic, { profile, creds }, deps);
-  return { message, to, cc, subject };
+  return { to, cc, subject, synthetic };
 }
 
 export async function runReply(opts, deps) {
   const profile = deps.resolveProfile(opts.profile);
   const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
-  const { message, to, cc, subject } = await buildReply(opts, deps, profile, creds);
+  const { to, cc, subject, synthetic } = await deriveReply(opts, deps, profile, creds);
 
   if (opts.draft) {
+    // Draft path: build from raw derived recipients (aliases are moot — replies go to real addrs).
+    const { message } = buildMessage({ to, cc, bcc: [] }, synthetic, { profile, creds }, deps);
     const raw = await buildRawMime(message);
     const res = await withClient(opts, deps, async (client) => appendDraft(client, raw));
     return { action: 'reply-drafted', uid: res.uid, mailbox: res.mailbox, to, cc, subject };
@@ -61,11 +65,17 @@ export async function runReply(opts, deps) {
     throw new InvalidInputError('Cannot derive a reply recipient (original has no From/Reply-To). Use --draft to stage one, or specify recipients on a fresh send.');
   }
 
-  const { enforce, denied } = resolveRecipients({ to, cc, bcc: [] }, opts, { profile, creds }, deps);
+  // Send path: resolve → enforce → build from resolved → send.
+  const { enforce, denied, to: toResolved, cc: ccResolved } =
+    resolveRecipients({ to, cc, bcc: [] }, opts, { profile, creds }, deps);
   enforceAllowlist(denied, enforce);
+  const { message } = buildMessage(
+    { to: toResolved.filter(Boolean), cc: ccResolved.filter(Boolean), bcc: [] },
+    synthetic, { profile, creds }, deps,
+  );
   const info = await deps.createTransport(creds).sendMail(message);
-  logSend({ from: message.from, to, cc, subject, messageId: info.messageId }, opts, { profile }, deps);
-  return { action: 'replied', to, cc, subject, messageId: info.messageId, accepted: info.accepted || [] };
+  logSend({ from: message.from, to: toResolved, cc: ccResolved, subject, messageId: info.messageId }, opts, { profile }, deps);
+  return { action: 'replied', to: toResolved, cc: ccResolved, subject, messageId: info.messageId, accepted: info.accepted || [] };
 }
 
 function forwardHeader(orig) {
@@ -88,16 +98,20 @@ export async function runForward(opts, deps) {
   const subject = /^fwd:/i.test(orig.subject || '') ? orig.subject : `Fwd: ${orig.subject || ''}`;
   const body = `${opts.body ? opts.body + '\n\n' : ''}${forwardHeader(orig)}\n\n${orig.text || ''}`;
   const synthetic = { ...opts, subject, body, inReplyTo: undefined, references: [] };
-  const { message } = buildMessage({ to, cc: [], bcc: [] }, synthetic, { profile, creds }, deps);
+
+  // Resolve → enforce → build from resolved (ensures aliases expand before SMTP sees recipients).
+  const { enforce, denied, to: toResolved } =
+    resolveRecipients({ to, cc: [], bcc: [] }, opts, { profile, creds }, deps);
+  enforceAllowlist(denied, enforce);
+
+  const { message } = buildMessage({ to: toResolved.filter(Boolean), cc: [], bcc: [] }, synthetic, { profile, creds }, deps);
 
   // Re-attach the original attachments (content buffers, not file paths).
   const origAtts = (orig.attachments || []).map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType }));
   if (origAtts.length) message.attachments = [...(message.attachments || []), ...origAtts];
 
-  const { enforce, denied } = resolveRecipients({ to, cc: [], bcc: [] }, opts, { profile, creds }, deps);
-  enforceAllowlist(denied, enforce);
   const info = await deps.createTransport(creds).sendMail(message);
-  logSend({ from: message.from, to, subject, messageId: info.messageId }, opts, { profile }, deps);
-  return { action: 'forwarded', to, subject, messageId: info.messageId, accepted: info.accepted || [],
+  logSend({ from: message.from, to: toResolved, subject, messageId: info.messageId }, opts, { profile }, deps);
+  return { action: 'forwarded', to: toResolved, subject, messageId: info.messageId, accepted: info.accepted || [],
     attachments: origAtts.map((a) => a.filename) };
 }

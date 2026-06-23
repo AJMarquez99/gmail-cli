@@ -458,4 +458,22 @@ describe('runReadDownload', () => {
     expect(result.attachments.every((a) => a.filename === 'evil.txt')).toBe(true);
     expect(result.attachments.every((a) => a.path.startsWith(outDir + sep))).toBe(true);
   });
+
+  it('writes attachment correctly when outDir is the filesystem root (/)', async () => {
+    const deps = makeDeps({ messages: { 9: makeMsg(9) }, searchUids: [9] });
+    deps.parseMessage = vi.fn(async () => ({
+      attachments: [{ filename: 'report.pdf', content: Buffer.from('data'), size: 4 }],
+    }));
+    deps.writeFile = vi.fn();
+    deps._client.fetch = function () {
+      async function* gen() { yield makeMsg(9); }
+      return gen();
+    };
+
+    // dir: '/' — outDir resolves to '/'
+    const result = await runReadDownload({ target: '9', mailbox: 'INBOX', dir: '/' }, deps);
+    expect(deps.writeFile).toHaveBeenCalledWith('/report.pdf', Buffer.from('data'));
+    expect(result.attachments).toHaveLength(1);
+    expect(result.attachments[0].filename).toBe('report.pdf');
+  });
 });
