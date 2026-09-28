@@ -14,7 +14,8 @@ Instead, use GitHub's private reporting:
 1. Go to the repository's **Security** tab.
 2. Click **Report a vulnerability** to open a private advisory.
 
-We'll acknowledge within a few days and keep you updated on the fix.
+If you'd rather email, write to **alejandromarquez@live.com** with details and steps to
+reproduce. We'll acknowledge within a few days and keep you updated on the fix.
 
 ## Threat model
 
