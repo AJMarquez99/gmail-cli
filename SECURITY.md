@@ -48,14 +48,15 @@ an unchecked path.
 
 Locking the boundary (`GMAIL_CLI_LOCKED=1`, or `gmail config set locked true`) makes the CLI refuse
 every agent-reachable action that could widen or disable the boundary itself: editing the
-allowlist, changing boundary-related config keys (`allowlist.*`, `attachRoot`, `maxRecipients`,
-`capabilities`, `deny`, `profiles`, `locked`), `gmail login`, adding/removing profiles or changing
-their capability scope, and any send that tries to bypass enforcement. All of these refuse with
+allowlist, changing boundary-related config keys (`allowlist.*`, `allowlistPath`,
+`credentialsPath`, `attachRoot`, `maxRecipients`, `capabilities`, `deny`, `profiles`, `locked`),
+`gmail login`, adding/removing profiles or changing their capability scope, and any send that tries to bypass enforcement. All of these refuse with
 exit `3` while locked; reading, enforced sends, drafting, and non-boundary config are unaffected.
 
 **This governs only changes made *through the CLI*.** It is not a sandbox. An agent that can set
-environment variables the CLI reads (`GMAIL_CLI_SETTINGS`, `GMAIL_ALLOWLIST`, `GMAIL_CLI_CONFIG`,
-`GMAIL_USER`/`GMAIL_APP_PASSWORD`, or `GMAIL_CLI_LOCKED` itself) — or that can write to
+environment variables the CLI reads (e.g. `GMAIL_CLI_SETTINGS`, `GMAIL_ALLOWLIST`,
+`GMAIL_CLI_CONFIG`, `GMAIL_PROFILE`, `GMAIL_USER`/`GMAIL_APP_PASSWORD`, or `GMAIL_CLI_LOCKED` itself)
+— or that can write to
 `~/.config/gmail-cli` directly — can defeat the lock entirely, by pointing the CLI at different
 files or editing the real ones out from under it. A real seal requires both: fix these environment
 variables in the agent's own launcher (so the agent process cannot change them), **and** make the

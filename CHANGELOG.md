@@ -61,6 +61,11 @@ still App-Password-only (no OAuth), JSON-by-default, and fail-closed.
   succeeded and archived nothing. Now archives via `MOVE` to `[Gmail]/All Mail` — the documented Gmail
   archive idiom — and verifies the server actually moved the requested UID(s), throwing instead of
   reporting success on a partial or empty move.
+- **`gmail move`/`gmail trash` (and the rule `move:`/`trash` actions) reported success without
+  checking the server.** They now verify the `MOVE` result the same way `archive` does. A rule with
+  both `archive` and `trash` previously reported the message "trashed" while it actually sat in All
+  Mail (archive had already moved it out of INBOX, so the trash matched nothing); that trash action
+  now lands in the rule's errors instead.
 - **IMAP connections could hang indefinitely.** `doctor`, `draft send`, and every `read`/`label`/
   `mark`/`organize` command now route through one connect helper that races each attempt against a
   connect/greeting/socket deadline and retries once on a stalled connection before failing, instead of
@@ -107,7 +112,7 @@ still App-Password-only (no OAuth), JSON-by-default, and fail-closed.
   changes apply to this codebase's usage of either major (see git history for the compatibility
   review); Node ≥20 remains required.
 - **CI audit gates.** `npm audit --audit-level=high` now fails the lint/PR build; the tag-triggered
-  publish workflow runs the same gate scoped to production dependencies (`--omit=dev`) immediately
-  before `npm publish`, so a vulnerable dependency can no longer ship silently through either path.
+  publish workflow runs a stricter gate on production dependencies
+  (`npm audit --omit=dev --audit-level=moderate`) immediately before `npm publish`, so a vulnerable dependency can no longer ship silently through either path.
 
 [1.0.0]: https://github.com/AJMarquez99/gmail-cli/releases/tag/v1.0.0

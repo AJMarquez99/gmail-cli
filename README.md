@@ -350,6 +350,9 @@ export GMAIL_CLI_LOCKED=1          # or "true"; set it in the environment the ag
 gmail config set locked true       # equivalent to hand-editing config.json: { "locked": true }
 ```
 
+`locked` accepts only `true` or `false`; any other value (`1`, `yes`, ...) is rejected with exit `2`
+and nothing is written.
+
 While locked, these all refuse with **exit `3`** (nothing is written or sent):
 
 - `gmail allow add` / `gmail allow remove`
@@ -365,9 +368,9 @@ Everything else (reading, enforced sends, drafts, `profile use`, non-boundary co
 `locked` to `false` in `config.json` by hand.
 
 **What the lock does not cover.** The lock only governs changes made *through the CLI*. An agent
-that can set environment variables (`GMAIL_CLI_SETTINGS`, `GMAIL_ALLOWLIST`, `GMAIL_CLI_CONFIG`,
-`GMAIL_USER`/`GMAIL_APP_PASSWORD`, or `GMAIL_CLI_LOCKED` itself) or write the config directory can
-defeat it — by pointing the CLI at different files, or by editing them directly. For a real seal,
+that can set environment variables (e.g. `GMAIL_CLI_SETTINGS`, `GMAIL_ALLOWLIST`,
+`GMAIL_CLI_CONFIG`, `GMAIL_PROFILE`, `GMAIL_USER`/`GMAIL_APP_PASSWORD`, or `GMAIL_CLI_LOCKED` itself)
+or write the config directory can defeat it — by pointing the CLI at different files, or by editing them directly. For a real seal,
 fix the environment in the agent's launcher (so the agent cannot change it) and make
 `~/.config/gmail-cli` non-writable by the agent. See [SECURITY.md](SECURITY.md).
 
