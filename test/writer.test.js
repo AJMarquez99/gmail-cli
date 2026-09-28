@@ -452,3 +452,150 @@ describe('batch UID array support', () => {
     expect(r.uid).toEqual([5, 6]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Removing a label from inside that label's own mailbox
+// Gmail hides the selected mailbox's own label from X-GM-LABELS, so a
+// `STORE -X-GM-LABELS (L)` while L is selected answers OK and changes nothing.
+// The writer must MOVE to All Mail instead (verified, like archive).
+// ---------------------------------------------------------------------------
+
+describe('label removal from its own mailbox MOVEs to All Mail', () => {
+  const noMove = () => ({ mailboxOpen: async () => {}, messageMove: async () => ({ path: 'Work', destination: ALL_MAIL }) });
+
+  it('removeLabel with label === mailbox MOVEs to All Mail and never STOREs -label', async () => {
+    const c = mkClient();
+    const r = await removeLabel(c, { uid: '7', label: 'Work', mailbox: 'Work' });
+    expect(c.calls).toContainEqual(['open', 'Work']);
+    expect(c.calls).toContainEqual(['move', 7, ALL_MAIL, { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+    expect(r).toEqual({ uid: 7, label: 'Work', action: 'removed' });
+  });
+
+  it('removeLabel with label === mailbox keeps the uid-array return shape', async () => {
+    const c = mkClient();
+    const r = await removeLabel(c, { uid: [3, 4], label: 'Work', mailbox: 'Work' });
+    expect(r).toEqual({ uid: [3, 4], label: 'Work', action: 'removed' });
+  });
+
+  it('removeLabel of a system label from its own mailbox (\\Starred in [Gmail]/Starred) MOVEs', async () => {
+    const c = mkClient();
+    await removeLabel(c, { uid: '7', label: '\\Starred', mailbox: '[Gmail]/Starred' });
+    expect(c.calls).toContainEqual(['move', 7, ALL_MAIL, { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+  });
+
+  it('removeLabel in its own mailbox throws InvalidInputError (exit 2) when nothing moved', async () => {
+    const err = await removeLabel(noMove(), { uid: 7, label: 'Work', mailbox: 'Work' }).catch((e) => e);
+    expect(err).toBeInstanceOf(InvalidInputError);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/uid 7/);
+    expect(err.message).toMatch(/Work/);
+  });
+
+  it('removeLabel in its own mailbox throws GmailError (exit 1) when the MOVE is rejected, and on a partial move', async () => {
+    const rejected = await removeLabel({ mailboxOpen: async () => {}, messageMove: async () => false },
+      { uid: 7, label: 'Work', mailbox: 'Work' }).catch((e) => e);
+    expect(rejected).toBeInstanceOf(GmailError);
+    expect(rejected).not.toBeInstanceOf(InvalidInputError);
+    expect(rejected.exitCode).toBe(1);
+    const partial = await removeLabel({ mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900]]) }) },
+      { uid: [5, 6], label: 'Work', mailbox: 'Work' }).catch((e) => e);
+    expect(partial).toBeInstanceOf(GmailError);
+    expect(partial).not.toBeInstanceOf(InvalidInputError);
+    expect(partial.message).toMatch(/1 of 2/);
+  });
+
+  it('removeLabel from another mailbox still STOREs -label (no MOVE)', async () => {
+    const c = mkClient();
+    await removeLabel(c, { uid: '7', label: 'Work', mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['remove', 7, ['Work'], { uid: true, useLabels: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+
+  it('starMessage on:false in [Gmail]/Starred MOVEs to All Mail', async () => {
+    const c = mkClient();
+    const r = await starMessage(c, { uid: '7', on: false, mailbox: '[Gmail]/Starred' });
+    expect(c.calls).toContainEqual(['move', 7, ALL_MAIL, { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+    expect(r).toEqual({ uid: 7, starred: false, action: 'unstarred' });
+  });
+
+  it('starMessage on:false in [Gmail]/Starred throws exit 2 when nothing moved', async () => {
+    const err = await starMessage(noMove(), { uid: 7, on: false, mailbox: '[Gmail]/Starred' }).catch((e) => e);
+    expect(err).toBeInstanceOf(InvalidInputError);
+    expect(err.exitCode).toBe(2);
+  });
+
+  it('starMessage on:false in INBOX still STOREs -\\Starred', async () => {
+    const c = mkClient();
+    await starMessage(c, { uid: '7', on: false, mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['remove', 7, ['\\Starred'], { uid: true, useLabels: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+
+  it('importantMessage on:false in [Gmail]/Important MOVEs to All Mail', async () => {
+    const c = mkClient();
+    const r = await importantMessage(c, { uid: '7', on: false, mailbox: '[Gmail]/Important' });
+    expect(c.calls).toContainEqual(['move', 7, ALL_MAIL, { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+    expect(r).toEqual({ uid: 7, important: false, action: 'unmarked-important' });
+  });
+
+  it('importantMessage on:false in [Gmail]/Important throws exit 2 when nothing moved', async () => {
+    const err = await importantMessage(noMove(), { uid: 7, on: false, mailbox: '[Gmail]/Important' }).catch((e) => e);
+    expect(err).toBeInstanceOf(InvalidInputError);
+    expect(err.exitCode).toBe(2);
+  });
+
+  it('importantMessage on:false in INBOX still STOREs -\\Important', async () => {
+    const c = mkClient();
+    await importantMessage(c, { uid: '7', on: false, mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['remove', 7, ['\\Important'], { uid: true, useLabels: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+
+  it('adding a label/star/important while in its own mailbox is unchanged (STORE +label, no MOVE)', async () => {
+    const c = mkClient();
+    await addLabel(c, { uid: '7', label: 'Work', mailbox: 'Work' });
+    await starMessage(c, { uid: '7', on: true, mailbox: '[Gmail]/Starred' });
+    await importantMessage(c, { uid: '7', on: true, mailbox: '[Gmail]/Important' });
+    expect(c.calls).toContainEqual(['add', 7, ['Work'], { uid: true, useLabels: true }]);
+    expect(c.calls).toContainEqual(['add', 7, ['\\Starred'], { uid: true, useLabels: true }]);
+    expect(c.calls).toContainEqual(['add', 7, ['\\Important'], { uid: true, useLabels: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+
+  it('markMessage seen:false in any mailbox still STOREs -\\Seen (a real IMAP flag, not a label)', async () => {
+    const c = mkClient();
+    await markMessage(c, { uid: '7', seen: false, mailbox: '[Gmail]/Starred' });
+    expect(c.calls).toContainEqual(['remove', 7, ['\\Seen'], { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+
+  // Regression guard: no writer may STORE -<label> while <label> (or its system mailbox) is selected.
+  it('regression guard: no writer STOREs -<label> while that label\'s mailbox is selected', async () => {
+    const cases = [
+      [removeLabel, { uid: 7, label: 'Work', mailbox: 'Work' }],
+      [removeLabel, { uid: 7, label: 'Parent/Child', mailbox: 'Parent/Child' }],
+      [removeLabel, { uid: 7, label: '\\Starred', mailbox: '[Gmail]/Starred' }],
+      [removeLabel, { uid: 7, label: '\\Important', mailbox: '[Gmail]/Important' }],
+      [removeLabel, { uid: [7, 8], label: 'Work', mailbox: 'Work' }],
+      [starMessage, { uid: 7, on: false, mailbox: '[Gmail]/Starred' }],
+      [importantMessage, { uid: 7, on: false, mailbox: '[Gmail]/Important' }],
+    ];
+    const MAILBOX_OF = { '\\Starred': '[Gmail]/Starred', '\\Important': '[Gmail]/Important' };
+    for (const [fn, opts] of cases) {
+      const c = mkClient();
+      await fn(c, opts);
+      let selected = null;
+      for (const [op, arg, flags] of c.calls) {
+        if (op === 'open') selected = arg;
+        if (op === 'remove') {
+          for (const f of flags) expect(MAILBOX_OF[f] ?? f, `${fn.name} ${JSON.stringify(opts)}`).not.toBe(selected);
+        }
+      }
+      expect(c.calls.some((x) => x[0] === 'move' && x[2] === ALL_MAIL), `${fn.name} ${JSON.stringify(opts)}`).toBe(true);
+    }
+  });
+});

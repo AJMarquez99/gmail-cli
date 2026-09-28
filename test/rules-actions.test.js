@@ -68,6 +68,18 @@ describe('runAction dispatches to the right writer op', () => {
     await runAction(c, parseAction('mark:read'), { uid: 7, mailbox: 'INBOX' }, {});
     expect(c.calls).toContainEqual(['add', 7, ['\\Seen'], { uid: true }]);
   });
+  it('unlabel:X from another mailbox → STORE -X', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('unlabel:Work'), { uid: 7, mailbox: 'INBOX' }, {});
+    expect(c.calls).toContainEqual(['remove', 7, ['Work'], { uid: true, useLabels: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+  it('unlabel:X on a rule whose mailbox is X → MOVE to All Mail, not a (silently ignored) STORE', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('unlabel:Work'), { uid: 7, mailbox: 'Work' }, {});
+    expect(c.calls).toContainEqual(['move', 7, '[Gmail]/All Mail', { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+  });
   it('move → messageMove to destination; trash → messageMove to Trash', async () => {
     const c = mkClient();
     await runAction(c, parseAction('move:Saved'), { uid: 7, mailbox: 'INBOX' }, {});
