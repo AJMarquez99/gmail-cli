@@ -9,8 +9,8 @@ import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { runConfigSet, runConfigGet, runConfigUnset } from './commands/config.js';
 import { runProfileAdd, runProfileList, runProfileUse, runProfileRemove, runProfileCaps } from './commands/profile.js';
-import { GmailError, EXIT_CODES, CapabilityDeniedError } from './lib/errors.js';
-import { requiredCapability, profileCan } from './capabilities.js';
+import { GmailError, EXIT_CODES } from './lib/errors.js';
+import { enforceCapability } from './capabilities.js';
 import { printJson, formatSend, formatDryRun, formatDoctor, formatAllowList, formatLog, formatInit, formatLogin, formatAllowMutation, formatConfig, formatProfileList, formatProfileMutation, formatProfileCaps, formatReadList, formatShow, formatThread, formatLabelList, formatLabelMutation, formatMark, formatWhoami, formatDraft, formatOrganize, formatCount, formatDownload, formatReply, formatForward, formatRulesMutation, formatRulesList, formatRulesApply, formatRulesXml } from './lib/format.js';
 import { runReadList, runReadSearch, runReadShow, runReadThread, runReadCount, runReadDownload } from './commands/read.js';
 import { runLabelList, runLabelAdd, runLabelRemove, runLabelCreate, runLabelDelete, runLabelRename } from './commands/label.js';
@@ -65,13 +65,7 @@ function handle(fn, { table, preprocess, args } = {}, deps = defaultDeps) {
     // Propagate global --profile into opts so every handler sees opts.profile.
     if (opts.profile === undefined) opts.profile = globalOpts.profile;
     try {
-      const cap = requiredCapability(commandPath(cmd), opts);
-      if (cap) {
-        const profile = deps.resolveProfile(opts.profile);
-        if (!profileCan(profile, cap)) {
-          throw new CapabilityDeniedError(cap, profile.name);
-        }
-      }
+      enforceCapability(commandPath(cmd), opts, deps);
       if (preprocess) await preprocess(opts);
       const result = await fn(opts, deps);
       if (globalOpts.format === 'table' && table) {
