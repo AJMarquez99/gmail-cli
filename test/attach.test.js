@@ -72,6 +72,17 @@ describe('attachments', () => {
     expect(d.readFileBytes).not.toHaveBeenCalled();
   });
 
+  it('refuses when the root is a symlink whose real target is the filesystem root', async () => {
+    const d = deps({
+      cwd: () => '/var/attachroot-symlink',
+      realpath: (p) => (p === '/var/attachroot-symlink' ? '/' : p),
+    });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['secret.txt'] }, d))
+      .rejects.toThrow(InvalidInputError);
+    expect(d.statFile).not.toHaveBeenCalled();
+    expect(d.readFileBytes).not.toHaveBeenCalled();
+  });
+
   it('allows a file inside the root when the root itself is a symlink', async () => {
     const d = deps({
       cwd: () => '/link-root',
