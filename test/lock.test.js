@@ -91,6 +91,12 @@ describe('locked boundary refuses agent-reachable widening', () => {
       expect(deps.writeFile).not.toHaveBeenCalled();
     },
   );
+  it('config set defaultProfile is allowed when locked (same as `profile use`)', async () => {
+    const deps = cfgDeps(JSON.stringify({ profiles: { work: {}, x: {} }, defaultProfile: 'work' }));
+    const out = await runConfigSet({ key: 'defaultProfile', value: 'x' }, deps);
+    expect(out.value).toBe('x');
+    expect(JSON.parse(deps.writeFile.mock.calls[0][1])).toMatchObject({ defaultProfile: 'x' });
+  });
   it('config set of a non-boundary key is still allowed when locked', async () => {
     const deps = cfgDeps();
     await runConfigSet({ key: 'fromName', value: 'Me' }, deps);

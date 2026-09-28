@@ -78,6 +78,22 @@ describe('runConfigSet — maxRecipients validation', () => {
   });
 });
 
+describe('runConfigSet — locked validation', () => {
+  it.each([['true', true], ['false', false]])('stores "%s" as the boolean %s', async (raw, want) => {
+    const d = deps();
+    const out = await runConfigSet({ key: 'locked', value: raw }, d);
+    expect(out.value).toBe(want);
+    expect(written(d)).toEqual({ locked: want });
+  });
+  it.each(['1', '0', 'yes', 'no', 'TRUE', 'on', ''])('rejects "%s" with exit 2 and writes nothing', async (bad) => {
+    const d = deps();
+    const err = await runConfigSet({ key: 'locked', value: bad }, d).catch((e) => e);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/locked/);
+    expect(d.writeFile).not.toHaveBeenCalled();
+  });
+});
+
 describe('runConfigGet', () => {
   it('returns a single key', async () => {
     const d = deps({ file: JSON.stringify({ fromName: 'X' }) });

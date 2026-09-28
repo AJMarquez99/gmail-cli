@@ -62,7 +62,8 @@ const bareKey = (key) => (key.startsWith('profiles.') ? key.split('.').slice(2).
 
 // Top-level settings that define the boundary: the allowlist (enforcement + which file), the
 // credentials file, the attachment root, the fan-out cap, capability scope, profile topology,
-// and the lock itself. Matched on the FIRST segment of the bare key, so `allowlist.enforce` and
+// and the lock itself. `defaultProfile` is deliberately NOT here: switching among existing
+// profiles is allowed while locked (it is what `profile use` / `--profile` already do). Matched on the FIRST segment of the bare key, so `allowlist.enforce` and
 // a fully-qualified `profiles.<name>.allowlist.enforce` are both covered.
 const BOUNDARY_KEYS = new Set([
   'allowlist',
@@ -73,7 +74,6 @@ const BOUNDARY_KEYS = new Set([
   'capabilities',
   'deny',
   'locked',
-  'defaultProfile',
   'profiles',
 ]);
 
@@ -94,13 +94,24 @@ function coerceMaxRecipients(key, value) {
   return n;
 }
 
+// `locked` must be a real boolean: isBoundaryLocked checks `config.locked === true`, so a string
+// like "1" or "yes" would be written and silently leave the boundary unlocked.
+function coerceLocked(key, value) {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new InvalidInputError(`"${key}" must be true or false (got: ${JSON.stringify(value)}).`);
+}
+
+const VALIDATORS = { maxRecipients: coerceMaxRecipients, locked: coerceLocked };
+
 export async function runConfigSet(opts, deps) {
   const { key, value } = opts;
   refuseIfLocked(key, deps);
   const profile = deps.resolveProfile(opts.profile);
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
-  const v = bareKey(key) === 'maxRecipients' ? coerceMaxRecipients(key, value) : coerce(value);
+  const validate = VALIDATORS[bareKey(key)];
+  const v = validate ? validate(key, value) : coerce(value);
   const kp = keyPath(profile, key, config);
   const next = setPath(config, kp, v);
   const unknownKey = !KNOWN_KEYS.has(bareKey(key)) || undefined;
