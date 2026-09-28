@@ -22,20 +22,45 @@ export function toList(value) {
   return arr.flatMap((entry) => String(entry).split(',')).map((s) => s.trim()).filter(Boolean);
 }
 
+const ATTACH_ROOT_HELP = 'Set one with `gmail config set attachRoot <dir>` (add --profile <name> for a profile).';
+
 export function buildAttachments(paths, deps, { root } = {}) {
   const base = resolvePath(root || deps.cwd());
+  // The effective root resolving to the filesystem root (e.g. an MCP server spawned with cwd
+  // `/`, or a config mistake) would make the confinement check below vacuous — every absolute
+  // path lies "under" `/`. Refuse outright rather than silently accepting anything.
+  if (resolvePath(base, '..') === base) {
+    throw new InvalidInputError(
+      `Refusing to attach files: the attachment root is the filesystem root. ${ATTACH_ROOT_HELP}`,
+    );
+  }
   const prefix = base.endsWith(sep) ? base : base + sep;
+  // Resolve the root itself too — it may be a symlink — so the confinement check below compares
+  // real paths on both sides.
+  const realBase = deps.realpath(base);
+  const realPrefix = realBase.endsWith(sep) ? realBase : realBase + sep;
   const out = [];
   let total = 0;
   for (const p of paths) {
     const abs = resolvePath(base, p);
     if (abs !== base && !abs.startsWith(prefix)) {
-      throw new InvalidInputError(`Refusing to attach a file outside ${base}: ${p}`);
+      throw new InvalidInputError(
+        `Refusing to attach a file outside ${base}: ${p}. ${ATTACH_ROOT_HELP} Or move the file under ${base}.`,
+      );
+    }
+    // Lexical confinement alone is defeated by a symlink inside the root pointing outside it
+    // (e.g. `ln -s ~/.ssh/id_rsa ./a.pdf`). Resolve the real path and re-check before reading.
+    let real;
+    try { real = deps.realpath(abs); } catch { throw new InvalidInputError(`Attachment not found: ${abs}`); }
+    if (real !== realBase && !real.startsWith(realPrefix)) {
+      throw new InvalidInputError(
+        `Refusing to attach a file outside ${base}: ${p}. ${ATTACH_ROOT_HELP} Or move the file under ${base}.`,
+      );
     }
     let stat;
-    try { stat = deps.statFile(abs); } catch { throw new InvalidInputError(`Attachment not found: ${abs}`); }
+    try { stat = deps.statFile(real); } catch { throw new InvalidInputError(`Attachment not found: ${abs}`); }
     if (!stat.isFile()) throw new InvalidInputError(`Attachment is not a file: ${abs}`);
-    const content = deps.readFileBytes(abs);
+    const content = deps.readFileBytes(real);
     total += stat.size;
     out.push({ filename: basename(abs), content, bytes: stat.size });
   }

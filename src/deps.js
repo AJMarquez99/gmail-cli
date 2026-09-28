@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { simpleParser } from 'mailparser';
 import { resolveCredentials } from './auth/credentials.js';
 import { createGmailTransport } from './transport.js';
@@ -21,6 +21,7 @@ export const defaultDeps = {
   loadConfig: () => loadConfig({}),
   statFile: (p) => statSync(p),
   readFileBytes: (p) => readFileSync(p),
+  realpath: (p) => realpathSync(p),
   cwd: () => process.cwd(),
   now: () => new Date().toISOString(),
   appendLog: (entry, o) => appendSendLog(entry, o || {}),

@@ -219,6 +219,7 @@ the single-account setup works exactly as before — profiles are purely opt-in.
 | Send log | `sent.jsonl` | `sent-<name>.jsonl` |
 | Identity (fromName, replyTo, signature) | top-level config keys | `profiles.<name>.*` |
 | Allowlist enforcement | `allowlist.enforce` | `profiles.<name>.allowlist.enforce` |
+| Attachment root | `attachRoot` (default: current directory) | `profiles.<name>.attachRoot` |
 
 File paths and settings can be set for any profile with a fully-qualified key
 (`gmail config set profiles.work.credentialsPath ~/secrets/work-creds.json`) or a bare key plus
@@ -424,9 +425,12 @@ gmail send --to alice@example.com --subject "Report" --body "# Report" --markdow
 # Pipe the body in (handy for agents / long content); --markdown works with piped input too
 generate-report | gmail send --to team@example.com --subject "Nightly report" --markdown
 
-# Attach files (repeatable; comma-separated ok; hard limit 25MB total, warning at 20MB)
+# Attach files (repeatable; comma-separated ok; hard limit 25MB total, warning at 20MB).
+# Attachments are confined to config.attachRoot (default: the current directory) — set it once,
+# then pass paths relative to it (or absolute paths under it).
+gmail config set attachRoot ~/docs
 gmail send --to alice@example.com --subject "Invoice" --body "See attached." \
-  --attach ~/docs/invoice.pdf --attach ~/docs/receipt.pdf
+  --attach invoice.pdf --attach receipt.pdf
 
 # Thread a reply (sets In-Reply-To and References)
 gmail send --to alice@example.com --subject "Re: Question" --body "Sure!" \
@@ -703,6 +707,7 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 | `sendLog.enabled` | `false` disables the send log globally | `--no-log` (per-send) |
 | `sendLog.logBody` | `true` includes body text in every log entry | `--log-body` (per-send) |
 | `allowlist.enforce` | `false` disables allowlist enforcement globally (default: `true`) | `--no-allowlist` (per-send) |
+| `attachRoot` | Directory `--attach` paths are confined to (default: the current directory); `~` expands to `$HOME`. Refused outright if it resolves to the filesystem root. | none — set per-send paths relative to it instead |
 
 ## `gmail send` options reference
 
@@ -716,7 +721,7 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 | `--html <html>` | HTML body (mutually exclusive with `--markdown`) |
 | `--markdown` | Render `--body` (or stdin) as Markdown → HTML with inline email styles; plain-text fallback is the raw Markdown |
 | `--no-style` | With `--markdown`: skip the inline email styler (raw `marked` HTML output) |
-| `--attach <path>` | File attachment (repeatable; comma-separated ok); hard limit 25MB total, warning at 20MB |
+| `--attach <path>` | File attachment (repeatable; comma-separated ok); confined to `config.attachRoot` (default: the current directory) — a path resolving outside it, or an attachRoot that resolves to the filesystem root, is refused; hard limit 25MB total, warning at 20MB |
 | `--from-name <name>` | Display name on the `From` header (overrides `config.fromName`) |
 | `--reply-to <addr>` | `Reply-To` address (overrides `config.replyTo`) |
 | `--in-reply-to <messageId>` | `In-Reply-To` header; threads the email in Gmail |
@@ -747,7 +752,8 @@ win over config values.
   },
   "allowlist": {
     "enforce": true
-  }
+  },
+  "attachRoot": "~/docs"
 }
 ```
 

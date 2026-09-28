@@ -11,6 +11,7 @@ const KNOWN_KEYS = new Set([
   'sendLog.enabled',
   'sendLog.logBody',
   'allowlist.enforce',
+  'attachRoot',
   'credentialsPath',
   'allowlistPath',
   'sendLogPath',
