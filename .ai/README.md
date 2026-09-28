@@ -31,10 +31,16 @@ promote to `knowledge/` or `lessons/`; the rest is disposable.
 ## Version control
 
 One test: **is the content regenerable?**
-- **Non-regenerable** (human intent / derived truth) → **fully tracked.** Everything except `context/`.
-  Transient ≠ untracked: `lessons/` and `notes/` are committed so they survive a fresh clone.
+- **Non-regenerable** (human intent / derived truth) → **fully tracked.** Everything except
+  `context/` and `plans/` (see below). Transient ≠ untracked: `lessons/` and `notes/` are committed
+  so they survive a fresh clone.
 - **Regenerable** (machine-derived session state) → track the folder + `README`, gitignore the
   contents. This is `context/` only.
+- **Repo-specific exception — `plans/` is kept local.** The general `.ai/` convention tracks
+  `plans/`, but this repo deliberately keeps it out of git (see `.ai/.gitignore`): only
+  `plans/README.md` is committed, everything else in `plans/` stays on the maintainer's machine.
+  A tracked file MUST NOT link to a path under `plans/` — describe the idea inline instead, or say
+  "(maintainer's local plan)".
 - Also gitignore anything with **sensitive data** (keys, credentials, drafts) regardless of folder.
 
 ## Archive policy

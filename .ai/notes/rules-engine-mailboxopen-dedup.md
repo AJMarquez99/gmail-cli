@@ -8,9 +8,10 @@ In `src/rules/engine.js` `applyRules`, the engine opens the mailbox once per rul
 `search`), but every action executor in `src/rules/actions.js` → `src/writer.js` *also* calls
 `client.mailboxOpen(mailbox)`. So each action re-SELECTs an already-open mailbox.
 
-After the **UID-set batching** change (see `.ai/plans/2026-06-22-rules-apply-uid-batching.md`), the
-redundant opens drop from N×M to **M** (one per action). This note covers squeezing that last bit
-out — skip the `mailboxOpen` when the mailbox is already selected.
+After the **UID-set batching** change (maintainer's local plan; landed via PR #17, c36fdd2) —
+actions are now grouped and applied per unique UID-set instead of one open per UID — the redundant
+opens drop from N×M to **M** (one per action). This note covers squeezing that last bit out — skip
+the `mailboxOpen` when the mailbox is already selected.
 
 ## The lift
 

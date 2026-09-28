@@ -1,5 +1,7 @@
 # Note: IMAP connections can hang indefinitely (no connect/socket timeout)
 
+> **Resolved in v1.0.0** (PR #18) — kept for history.
+
 **Captured:** 2026-06-26 · **Status:** RELEASE BLOCKER for v1.0.0 · **Priority:** high
 
 ## Symptom
@@ -52,9 +54,11 @@ can hang forever on a flaky network is the blocker; the throttling is just the m
    to wait for the server greeting), and `socketTimeout` (ms of inactivity before the socket is torn
    down). Add sane defaults (e.g. `connectionTimeout: 15000`, `greetingTimeout: 10000`,
    `socketTimeout: 30000`) so a stalled connection rejects and the command exits **1** instead of
-   hanging. Keep them overridable via the existing `...imapOpts` spread (already wired through
-   `profile.imap`), so a profile can tune them. Verify the exact option names against the pinned
-   imapflow version before shipping.
+   hanging. Keep them overridable via the existing `...imapOpts` spread (premise corrected — see
+   [[2026-09-27_config-set-double-prefixes-dotted-profile-keys]]: at capture time `resolveProfile()`
+   did not actually wire `profile.imap` through, so this needed a companion fix to be reachable), so
+   a profile can tune them. Verify the exact option names against the pinned imapflow version before
+   shipping.
 
 2. **Race `client.connect()` against an explicit deadline in `withClient` (belt-and-suspenders).**
    Wrap the connect in a `Promise.race([client.connect(), rejectAfter(ms)])`; on timeout, attempt
@@ -82,6 +86,7 @@ can hang forever on a flaky network is the blocker; the throttling is just the m
 ## Why it's a blocker, not deferred
 
 Unlike the two perf follow-ups ([[rules-engine-mailboxopen-dedup]],
-[[reply-no-quote-header-only-fetch]]) — which are invisible micro-optimizations — this is a
+[[reply-no-quote-header-only-fetch]], both in `.ai/notes/`) — which are invisible
+micro-optimizations — this is a
 correctness/UX failure mode the user hits in normal operation: a command that **never returns**. It
 should be fixed before tagging `v1.0.0`. Fix #1 is small and self-contained.
