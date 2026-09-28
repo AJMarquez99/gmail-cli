@@ -80,6 +80,12 @@ describe('runAction dispatches to the right writer op', () => {
     expect(c.calls).toContainEqual(['move', 7, '[Gmail]/All Mail', { uid: true }]);
     expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
   });
+  it('unlabel:work on a rule whose mailbox is Work (case differs) → MOVE, not STORE', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('unlabel:work'), { uid: 7, mailbox: 'Work' }, {});
+    expect(c.calls).toContainEqual(['move', 7, '[Gmail]/All Mail', { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+  });
   it('move → messageMove to destination; trash → messageMove to Trash', async () => {
     const c = mkClient();
     await runAction(c, parseAction('move:Saved'), { uid: 7, mailbox: 'INBOX' }, {});

@@ -81,10 +81,19 @@ export async function markMessage(client, { uid, seen, mailbox = 'INBOX' } = {})
 export const TRASH = '[Gmail]/Trash';
 export const ALL_MAIL = '[Gmail]/All Mail';
 
-/** Gmail system labels (X-GM-LABELS names) → the mailbox that lists them. Any other label's mailbox is its own name. */
-const SYSTEM_LABEL_MAILBOX = { '\\Starred': '[Gmail]/Starred', '\\Important': '[Gmail]/Important' };
-/** The mailbox that corresponds to a Gmail label. */
-const mailboxOfLabel = (label) => SYSTEM_LABEL_MAILBOX[label] ?? label;
+/**
+ * Gmail system labels (X-GM-LABELS names, lower-cased) → the mailbox that lists them. Any other
+ * label's mailbox is its own name.
+ */
+const SYSTEM_LABEL_MAILBOX = { '\\inbox': 'INBOX', '\\starred': '[Gmail]/Starred', '\\important': '[Gmail]/Important' };
+/**
+ * Is `mailbox` the mailbox that lists `label`? Case-insensitive: IMAP's INBOX and Gmail label
+ * names are both case-insensitive.
+ */
+const isOwnMailbox = (label, mailbox) => {
+  const l = String(label).toLowerCase();
+  return (SYSTEM_LABEL_MAILBOX[l] ?? l).toLowerCase() === String(mailbox).toLowerCase();
+};
 
 /**
  * Verify the server actually performed a MOVE (shared by archive, move, trash and own-mailbox label removal):
@@ -120,7 +129,7 @@ async function moveVerified(client, { uid, mailbox, destination, verb, hint }) {
  * Mail, which drops exactly L and keeps every other label. Otherwise a plain STORE.
  */
 async function dropLabel(client, { uid, label, mailbox, verb, hint }) {
-  if (mailboxOfLabel(label) === mailbox) {
+  if (isOwnMailbox(label, mailbox)) {
     await moveVerified(client, { uid, mailbox, destination: ALL_MAIL, verb, hint });
     return;
   }

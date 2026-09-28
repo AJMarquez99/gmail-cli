@@ -137,8 +137,12 @@ records the trash as an error instead of reporting it applied. The same trap cov
 removal from that label's own mailbox**: `removeLabel` with `label === mailbox`, and
 `starMessage`/`importantMessage` with `on: false` while `[Gmail]/Starred` / `[Gmail]/Important` is
 selected, all go through `dropLabel`, which does a `moveVerified` MOVE to All Mail (dropping exactly
-that label) instead of a `-X-GM-LABELS` STORE. The system-label→mailbox map (`SYSTEM_LABEL_MAILBOX`)
-sits beside `ALL_MAIL`/`TRASH`; any other label's mailbox is its own name. Never STORE `-<label>`
+that label) instead of a `-X-GM-LABELS` STORE. The system-label→mailbox map (`SYSTEM_LABEL_MAILBOX`:
+`\Inbox`→`INBOX`, `\Starred`, `\Important`) sits beside `ALL_MAIL`/`TRASH`; any other label's mailbox
+is its own name, and the match is case-insensitive (`work` vs `Work`, `inbox` vs `INBOX`). So
+`label remove <uid> '\Inbox'` from INBOX is equivalent to `archive`. Because the message leaves the
+rule's mailbox, later actions in the same rule no longer see it (they land in the rule's errors),
+exactly as after `archive`/`move`/`trash`. Never STORE `-<label>`
 while `<label>`'s mailbox is selected (a regression test in `test/writer.test.js` guards this). Adding
 a label, and `\Seen` (a real IMAP flag), are unaffected. The flag/label writers (`addLabel`,
 `removeLabel`, `markMessage`, `starMessage`, `importantMessage`) do **not** yet verify a server

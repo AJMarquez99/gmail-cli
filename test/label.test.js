@@ -188,7 +188,7 @@ describe('runLabelRemove', () => {
 
   it('coerces uid to a number', async () => {
     const deps = makeDeps();
-    await runLabelRemove({ uid: '5', name: 'inbox', mailbox: 'INBOX' }, deps);
+    await runLabelRemove({ uid: '5', name: 'tag', mailbox: 'INBOX' }, deps);
     expect(deps._client._flagsRemoveCalls[0].uid).toBe(5);
   });
 

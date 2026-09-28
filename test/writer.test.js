@@ -573,6 +573,41 @@ describe('label removal from its own mailbox MOVEs to All Mail', () => {
     expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
   });
 
+  it('removeLabel \\Inbox while INBOX is selected MOVEs to All Mail (the archive trap), with archive-style verification', async () => {
+    const c = mkClient();
+    const r = await removeLabel(c, { uid: '7', label: '\\Inbox', mailbox: 'INBOX' });
+    expect(c.calls).toContainEqual(['move', 7, ALL_MAIL, { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+    expect(r).toEqual({ uid: 7, label: '\\Inbox', action: 'removed' });
+    const err = await removeLabel(noMove(), { uid: 7, label: '\\Inbox', mailbox: 'INBOX' }).catch((e) => e);
+    expect(err).toBeInstanceOf(InvalidInputError);
+    expect(err.exitCode).toBe(2);
+  });
+
+  it('removeLabel \\Inbox from another mailbox still STOREs -\\Inbox', async () => {
+    const c = mkClient();
+    await removeLabel(c, { uid: '7', label: '\\Inbox', mailbox: '[Gmail]/All Mail' });
+    expect(c.calls).toContainEqual(['remove', 7, ['\\Inbox'], { uid: true, useLabels: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+
+  it('matches the label against the selected mailbox case-insensitively (work vs Work, \\Inbox vs inbox)', async () => {
+    const cases = [
+      { uid: 7, label: 'work', mailbox: 'Work' },
+      { uid: 7, label: 'Work', mailbox: 'WORK' },
+      { uid: 7, label: '\\Inbox', mailbox: 'inbox' },
+      { uid: 7, label: '\\inbox', mailbox: 'INBOX' },
+      { uid: 7, label: 'inbox', mailbox: 'INBOX' },
+      { uid: 7, label: '\\starred', mailbox: '[gmail]/starred' },
+    ];
+    for (const opts of cases) {
+      const c = mkClient();
+      await removeLabel(c, opts);
+      expect(c.calls, JSON.stringify(opts)).toContainEqual(['move', 7, ALL_MAIL, { uid: true }]);
+      expect(c.calls.some((x) => x[0] === 'remove'), JSON.stringify(opts)).toBe(false);
+    }
+  });
+
   // Regression guard: no writer may STORE -<label> while <label> (or its system mailbox) is selected.
   it('regression guard: no writer STOREs -<label> while that label\'s mailbox is selected', async () => {
     const cases = [
@@ -581,10 +616,12 @@ describe('label removal from its own mailbox MOVEs to All Mail', () => {
       [removeLabel, { uid: 7, label: '\\Starred', mailbox: '[Gmail]/Starred' }],
       [removeLabel, { uid: 7, label: '\\Important', mailbox: '[Gmail]/Important' }],
       [removeLabel, { uid: [7, 8], label: 'Work', mailbox: 'Work' }],
+      [removeLabel, { uid: 7, label: '\\Inbox', mailbox: 'INBOX' }],
+      [removeLabel, { uid: 7, label: 'work', mailbox: 'Work' }],
       [starMessage, { uid: 7, on: false, mailbox: '[Gmail]/Starred' }],
       [importantMessage, { uid: 7, on: false, mailbox: '[Gmail]/Important' }],
     ];
-    const MAILBOX_OF = { '\\Starred': '[Gmail]/Starred', '\\Important': '[Gmail]/Important' };
+    const MAILBOX_OF = { '\\starred': '[gmail]/starred', '\\important': '[gmail]/important', '\\inbox': 'inbox' };
     for (const [fn, opts] of cases) {
       const c = mkClient();
       await fn(c, opts);
@@ -592,7 +629,9 @@ describe('label removal from its own mailbox MOVEs to All Mail', () => {
       for (const [op, arg, flags] of c.calls) {
         if (op === 'open') selected = arg;
         if (op === 'remove') {
-          for (const f of flags) expect(MAILBOX_OF[f] ?? f, `${fn.name} ${JSON.stringify(opts)}`).not.toBe(selected);
+          for (const f of flags) {
+            expect(MAILBOX_OF[f.toLowerCase()] ?? f.toLowerCase(), `${fn.name} ${JSON.stringify(opts)}`).not.toBe(selected.toLowerCase());
+          }
         }
       }
       expect(c.calls.some((x) => x[0] === 'move' && x[2] === ALL_MAIL), `${fn.name} ${JSON.stringify(opts)}`).toBe(true);
