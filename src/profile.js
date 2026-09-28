@@ -26,6 +26,7 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
       allowlistEnforce: config.allowlist ? config.allowlist.enforce !== false : true,
       sendLog: config.sendLog || {},
       capabilities: resolveCapabilities(config),
+      imap: config.imap || {},
       legacy: true,
     };
   }
@@ -54,6 +55,7 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
     allowlistEnforce: p.allowlist ? p.allowlist.enforce !== false : true,
     sendLog: p.sendLog || {},
     capabilities: resolveCapabilities(p),
+    imap: p.imap || {},
     legacy: false,
   };
 }

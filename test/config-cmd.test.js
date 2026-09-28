@@ -152,3 +152,42 @@ describe('runConfigUnset — profile mode', () => {
     expect(w.profiles.work).toEqual({ replyTo: 'r@x.com' });
   });
 });
+
+describe('profile-qualified keys', () => {
+  const cfg = { profiles: { home: {}, work: {} }, defaultProfile: 'home' };
+  it('honors profiles.<name>.<key> verbatim — never nests under the active profile', async () => {
+    const d = deps({ file: JSON.stringify(cfg), config: cfg });
+    await runConfigSet({ key: 'profiles.work.fromName', value: 'W' }, d);
+    const w = written(d);
+    expect(w.profiles.work.fromName).toBe('W');
+    expect(w.profiles.home.profiles).toBeUndefined();
+  });
+  it('get/unset agree with set on the full path', async () => {
+    const file = { ...cfg, profiles: { ...cfg.profiles, work: { fromName: 'W' } } };
+    const d = deps({ file: JSON.stringify(file), config: file });
+    expect((await runConfigGet({ key: 'profiles.work.fromName' }, d)).value).toBe('W');
+    await runConfigUnset({ key: 'profiles.work.fromName' }, d);
+    expect(written(d).profiles.work.fromName).toBeUndefined();
+  });
+  it('bare key + --profile still scopes to that profile (happy-path guard)', async () => {
+    const d = deps({ file: JSON.stringify(cfg), config: cfg });
+    await runConfigSet({ key: 'fromName', value: 'W', profile: 'work' }, d);
+    expect(written(d).profiles.work.fromName).toBe('W');
+  });
+  it('rejects an unknown profile with exit 2 (never creates a profiles block)', async () => {
+    const d = deps({ file: JSON.stringify({}), config: {} }); // legacy mode
+    const err = await runConfigSet({ key: 'profiles.work.fromName', value: 'W' }, d).catch((e) => e);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/profile add work/);
+    expect(d.writeFile).not.toHaveBeenCalled();
+  });
+  it('rejects profiles.<name> with no setting', async () => {
+    const d = deps({ file: JSON.stringify(cfg), config: cfg });
+    await expect(runConfigSet({ key: 'profiles.work', value: 'x' }, d)).rejects.toMatchObject({ exitCode: 2 });
+  });
+  it('does not flag real per-profile keys as unknown', async () => {
+    const d = deps({ file: JSON.stringify(cfg), config: cfg });
+    const out = await runConfigSet({ key: 'profiles.work.credentialsPath', value: '~/c.json' }, d);
+    expect(out.unknownKey).toBeFalsy();
+  });
+});

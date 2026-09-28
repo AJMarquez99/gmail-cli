@@ -106,6 +106,17 @@ describe('resolveProfile — capabilities', () => {
   });
 });
 
+describe('resolveProfile — imap overrides', () => {
+  it('returns per-profile imap overrides', () => {
+    const p = resolveProfile({ env: ENV, config: { profiles: { w: { imap: { host: 'h', port: 1 } } } }, name: 'w' });
+    expect(p.imap).toEqual({ host: 'h', port: 1 });
+  });
+  it('imap defaults to {} in both modes', () => {
+    expect(resolveProfile({ env: ENV, config: {}, name: undefined }).imap).toEqual({});
+    expect(resolveProfile({ env: ENV, config: { profiles: { w: {} } }, name: 'w' }).imap).toEqual({});
+  });
+});
+
 describe('resolveProfile — rulesPath', () => {
   it('legacy: default rules.json', () => {
     const p = resolveProfile({ env: { HOME: '/h' }, config: {}, name: undefined });

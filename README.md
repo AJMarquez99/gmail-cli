@@ -184,7 +184,9 @@ remains send-only. HTML bodies are fetched but kept in memory only; nothing is p
 
 All read commands (`read`, `label`, `mark`) are profile-aware: use `--profile <name>` or set
 `GMAIL_PROFILE` to select an account. Per-profile IMAP host/port overrides can be set in
-`config.json` under `profiles.<name>.imap`:
+`config.json` under `profiles.<name>.imap`. IMAP connection timeouts (in milliseconds) can also
+be overridden per profile: `imap.connectionTimeout` (default `15000`), `imap.greetingTimeout`
+(default `10000`), and `imap.socketTimeout` (default `120000`):
 
 ```json
 {
@@ -192,7 +194,10 @@ All read commands (`read`, `label`, `mark`) are profile-aware: use `--profile <n
     "work": {
       "imap": {
         "host": "imap.example.com",
-        "port": 993
+        "port": 993,
+        "connectionTimeout": 15000,
+        "greetingTimeout": 10000,
+        "socketTimeout": 120000
       }
     }
   }
@@ -215,8 +220,10 @@ the single-account setup works exactly as before — profiles are purely opt-in.
 | Identity (fromName, replyTo, signature) | top-level config keys | `profiles.<name>.*` |
 | Allowlist enforcement | `allowlist.enforce` | `profiles.<name>.allowlist.enforce` |
 
-File paths can be overridden per-profile via `gmail config set` (dotted keys such as
-`profiles.work.credentialsPath ~/secrets/work-creds.json`).
+File paths and settings can be set for any profile with a fully-qualified key
+(`gmail config set profiles.work.credentialsPath ~/secrets/work-creds.json`) or a bare key plus
+`--profile` (`gmail config set fromName "Work Me" --profile work`). The profile must already
+exist (`gmail profile add`).
 
 ### Profile resolution
 
@@ -638,7 +645,7 @@ server-side equivalent and is omitted from the export.
 | `gmail allow list` | List allowed recipients and their aliases (read-only). |
 | `gmail allow add <email>` | Add a recipient to the allowlist (idempotent; merges aliases if entry already exists). |
 | `gmail allow remove <email\|alias>` | Remove a recipient by email address or alias. |
-| `gmail config set <key> <value>` | Set a config preference (dotted key; `true`/`false` coerced to boolean). |
+| `gmail config set <key> <value>` | Set a config preference (dotted key; `true`/`false` coerced to boolean). A fully-qualified `profiles.<name>.<key>` targets that profile directly, regardless of the active one. |
 | `gmail config get [key]` | Show one config key, or the whole config if no key is given. |
 | `gmail config unset <key>` | Remove a config key. |
 | `gmail log` | Show recent sent-mail log entries, newest first (alias: `gmail sent`). |
@@ -681,7 +688,7 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 
 | Command | Description |
 |---|---|
-| `gmail config set <key> <value>` | Write a value. Dotted keys (`signature.text`) create/update nested objects. `true`/`false` strings are coerced to booleans. Unknown keys are written with a warning. |
+| `gmail config set <key> <value>` | Write a value. Dotted keys (`signature.text`) create/update nested objects. `true`/`false` strings are coerced to booleans. Unknown keys are written with a warning. A fully-qualified `profiles.<name>.<key>` writes to that profile's settings verbatim (the profile must already exist); a bare key with `--profile <name>` scopes to that profile the same way. |
 | `gmail config get [key]` | Print a single key's value, or the whole config if `[key]` is omitted. |
 | `gmail config unset <key>` | Delete a key (and its subtree if dotted). |
 
