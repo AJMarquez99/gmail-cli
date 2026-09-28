@@ -1,5 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { MalformedConfigError } from './errors.js';
+import { tightenMode } from './permissions.js';
+
+// fs.writeFileSync's 3rd arg must be a string (encoding) or an options object — a bare mode
+// number (e.g. 0o600) throws ERR_INVALID_ARG_TYPE, so the default writeFile wraps it.
+const defaultWriteFile = (p, data, mode) => writeFileSync(p, data, mode != null ? { mode } : undefined);
 
 /**
  * Read and parse a JSON file — the single JSON-parsing choke point for all config-style files
@@ -29,13 +34,18 @@ export function readJson(path, { readFile = readFileSync, onMissing } = {}) {
 }
 
 /**
- * Write an object to a JSON file as pretty-printed JSON with a trailing newline.
+ * Write an object to a JSON file as pretty-printed JSON with a trailing newline. When both `mode`
+ * and `chmod` are given, re-tightens the file to `mode` after writing — `writeFile`'s mode option
+ * only applies at creation, so this is what actually re-tightens an already-existing file (an
+ * upgrading install's pre-hardening 0644 config.json/allowlist.json/rules.json). A chmod failure
+ * is swallowed (via `tightenMode`) rather than failing a write that already succeeded.
  * @param {string} path
  * @param {object} obj
- * @param {{ writeFile?: Function, mode?: number }} [opts]
+ * @param {{ writeFile?: Function, mode?: number, chmod?: Function, warn?: Function }} [opts]
  */
-export function writeJson(path, obj, { writeFile = writeFileSync, mode } = {}) {
+export function writeJson(path, obj, { writeFile = defaultWriteFile, mode, chmod, warn } = {}) {
   writeFile(path, JSON.stringify(obj, null, 2) + '\n', mode);
+  tightenMode(path, mode, { chmod, warn });
 }
 
 /**

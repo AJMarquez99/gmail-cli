@@ -8,5 +8,7 @@ export function createGmailTransport(creds, { createTransport = nodemailer.creat
   return createTransport({
     service: 'gmail',
     auth: { user: creds.user, pass: creds.appPassword },
+    disableFileAccess: true,
+    disableUrlAccess: true,
   });
 }

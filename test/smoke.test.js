@@ -7,8 +7,8 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 describe('package', () => {
   it('declares the gmail + gmail-mcp bins and is ESM', () => {
     expect(pkg.type).toBe('module');
-    expect(pkg.bin.gmail).toBe('./bin/gmail.js');
-    expect(pkg.bin['gmail-mcp']).toBe('./bin/gmail-mcp.js');
+    expect(pkg.bin.gmail).toBe('bin/gmail.js');
+    expect(pkg.bin['gmail-mcp']).toBe('bin/gmail-mcp.js');
   });
 
   it('is publish-shaped: scoped name, files allowlist, public access', () => {

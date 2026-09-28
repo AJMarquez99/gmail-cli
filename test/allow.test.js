@@ -50,6 +50,7 @@ function wDeps({ file, config = {} } = {}) {
     }),
     writeFile: vi.fn(),
     ensureDir: vi.fn(),
+    chmod: vi.fn(),
   };
 }
 
@@ -62,6 +63,8 @@ describe('runAllowAdd', () => {
     expect(written(d).recipients).toEqual([{ email: 'alice@example.com', aliases: ['alice', 'a'] }]);
     expect(out.action).toBe('created');
     expect(d.ensureDir).toHaveBeenCalled();
+    expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
+    expect(d.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/allowlist.json', 0o600);
   });
 
   it('merges aliases into an existing email (idempotent, no dupes)', async () => {
@@ -102,6 +105,8 @@ describe('runAllowRemove', () => {
     const out = await runAllowRemove({ target: 'alice@example.com' }, d);
     expect(written(d).recipients.map((r) => r.email)).toEqual(['bob@example.com']);
     expect(out.action).toBe('removed');
+    expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
+    expect(d.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/allowlist.json', 0o600);
   });
 
   it('removes by alias', async () => {

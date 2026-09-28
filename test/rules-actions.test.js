@@ -1,0 +1,96 @@
+import { describe, it, expect } from 'vitest';
+import { parseAction, parseActions, runAction } from '../src/rules/actions.js';
+
+describe('parseAction', () => {
+  it('parses prefixed actions with args', () => {
+    expect(parseAction('label:Outreach/Acme')).toEqual({ raw: 'label:Outreach/Acme', type: 'label', arg: 'Outreach/Acme', bucket: 'organize' });
+    expect(parseAction('move:Saved')).toEqual({ raw: 'move:Saved', type: 'move', arg: 'Saved', bucket: 'organize' });
+    expect(parseAction('unlabel:X')).toEqual({ raw: 'unlabel:X', type: 'unlabel', arg: 'X', bucket: 'organize' });
+  });
+  it('preserves colons in label arg (label:A:B)', () => {
+    expect(parseAction('label:A:B')).toEqual({ raw: 'label:A:B', type: 'label', arg: 'A:B', bucket: 'organize' });
+  });
+  it('parses bare actions', () => {
+    expect(parseAction('archive')).toEqual({ raw: 'archive', type: 'archive', bucket: 'organize' });
+    expect(parseAction('mark:read')).toEqual({ raw: 'mark:read', type: 'mark-read', bucket: 'organize' });
+    expect(parseAction('star')).toEqual({ raw: 'star', type: 'star', bucket: 'organize' });
+    expect(parseAction('important')).toEqual({ raw: 'important', type: 'important', bucket: 'organize' });
+    expect(parseAction('trash')).toEqual({ raw: 'trash', type: 'trash', bucket: 'delete' });
+  });
+  it('throws on unknown action + unsupported mark state', () => {
+    expect(() => parseAction('frobnicate')).toThrow(/unknown rule action/i);
+    expect(() => parseAction('mark:unread')).toThrow(/mark/i);
+  });
+});
+
+describe('parseActions', () => {
+  it('maps a list, preserving order', () => {
+    expect(parseActions(['label:A', 'archive']).map((a) => a.type)).toEqual(['label', 'archive']);
+  });
+  it('empty/absent → []', () => {
+    expect(parseActions()).toEqual([]);
+    expect(parseActions([])).toEqual([]);
+  });
+});
+
+describe('runAction dispatches to the right writer op', () => {
+  const mkClient = () => {
+    const calls = [];
+    return { calls,
+      mailboxOpen: async (m) => calls.push(['open', m]),
+      messageFlagsAdd: async (u, f, o) => calls.push(['add', Number(u), f, o]),
+      messageFlagsRemove: async (u, f, o) => calls.push(['remove', Number(u), f, o]),
+      messageMove: async (u, d, o) => {
+        calls.push(['move', Number(u), d, o]);
+        return { uidMap: new Map([[Number(u), Number(u) + 900]]) };
+      },
+    };
+  };
+  it('label → addLabel (X-GM-LABELS add)', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('label:Promo'), { uid: 7, mailbox: 'INBOX' }, {});
+    expect(c.calls).toContainEqual(['add', 7, ['Promo'], { uid: true, useLabels: true }]);
+  });
+  it('archive → MOVE to All Mail', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('archive'), { uid: 7, mailbox: 'INBOX' }, {});
+    expect(c.calls).toContainEqual(['move', 7, '[Gmail]/All Mail', { uid: true }]);
+  });
+  it('star → add \\Starred; important → add \\Important', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('star'), { uid: 7, mailbox: 'INBOX' }, {});
+    await runAction(c, parseAction('important'), { uid: 7, mailbox: 'INBOX' }, {});
+    expect(c.calls).toContainEqual(['add', 7, ['\\Starred'], { uid: true, useLabels: true }]);
+    expect(c.calls).toContainEqual(['add', 7, ['\\Important'], { uid: true, useLabels: true }]);
+  });
+  it('mark:read → add \\Seen', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('mark:read'), { uid: 7, mailbox: 'INBOX' }, {});
+    expect(c.calls).toContainEqual(['add', 7, ['\\Seen'], { uid: true }]);
+  });
+  it('unlabel:X from another mailbox → STORE -X', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('unlabel:Work'), { uid: 7, mailbox: 'INBOX' }, {});
+    expect(c.calls).toContainEqual(['remove', 7, ['Work'], { uid: true, useLabels: true }]);
+    expect(c.calls.some((x) => x[0] === 'move')).toBe(false);
+  });
+  it('unlabel:X on a rule whose mailbox is X → MOVE to All Mail, not a (silently ignored) STORE', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('unlabel:Work'), { uid: 7, mailbox: 'Work' }, {});
+    expect(c.calls).toContainEqual(['move', 7, '[Gmail]/All Mail', { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+  });
+  it('unlabel:work on a rule whose mailbox is Work (case differs) → MOVE, not STORE', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('unlabel:work'), { uid: 7, mailbox: 'Work' }, {});
+    expect(c.calls).toContainEqual(['move', 7, '[Gmail]/All Mail', { uid: true }]);
+    expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
+  });
+  it('move → messageMove to destination; trash → messageMove to Trash', async () => {
+    const c = mkClient();
+    await runAction(c, parseAction('move:Saved'), { uid: 7, mailbox: 'INBOX' }, {});
+    await runAction(c, parseAction('trash'), { uid: 7, mailbox: 'INBOX' }, {});
+    expect(c.calls).toContainEqual(['move', 7, 'Saved', { uid: true }]);
+    expect(c.calls).toContainEqual(['move', 7, '[Gmail]/Trash', { uid: true }]);
+  });
+});

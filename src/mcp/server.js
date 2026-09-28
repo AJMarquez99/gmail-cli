@@ -4,11 +4,16 @@ import { defaultDeps } from '../deps.js';
 import { VERSION } from '../version.js';
 import { TOOLS } from './tools.js';
 import { GmailError } from '../lib/errors.js';
+import { enforceCapability } from '../capabilities.js';
 
 export function makeToolHandler(tool, deps) {
   return async (args) => {
     try {
-      const result = await tool.command(tool.mapArgs(args || {}), deps);
+      const opts = tool.mapArgs(args || {});
+      // Same capability gate the CLI applies in handle() — MCP must not be a parallel path
+      // that skips it. A denied bucket throws CapabilityDeniedError, surfaced as a tool error.
+      enforceCapability(tool.capabilityPath, opts, deps);
+      const result = await tool.command(opts, deps);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       // A GmailError (incl. RecipientNotAllowedError / MalformedConfigError) is surfaced as a

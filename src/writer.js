@@ -1,0 +1,200 @@
+import { GmailError, InvalidInputError } from './lib/errors.js';
+
+export const DRAFTS = '[Gmail]/Drafts';
+
+/** Normalize a UID scalar or array to an IMAP sequence set. */
+const toRange = (uid) => Array.isArray(uid) ? uid.map(Number).join(',') : Number(uid);
+/** Normalize a UID scalar or array to the return shape. */
+const toUid = (uid) => Array.isArray(uid) ? uid.map(Number) : Number(uid);
+
+/** Fetch the raw RFC822 source of a message by UID from a mailbox. Returns a Buffer, or null. */
+export async function fetchRawMessage(client, { uid, mailbox }) {
+  await client.mailboxOpen(mailbox);
+  for await (const msg of client.fetch(Number(uid), { uid: true, source: true }, { uid: true })) {
+    return msg.source;
+  }
+  return null;
+}
+
+/** APPEND a raw RFC822 message to the Drafts mailbox with the \Draft flag. */
+export async function appendDraft(client, raw) {
+  const res = await client.append(DRAFTS, raw, ['\\Draft']);
+  return { uid: res && res.uid, mailbox: DRAFTS };
+}
+
+/** Permanently delete a message by UID from a mailbox (used for draft discard/cleanup). */
+export async function deleteMessage(client, { uid, mailbox }) {
+  await client.mailboxOpen(mailbox);
+  await client.messageDelete(Number(uid), { uid: true });
+  return { uid: Number(uid), mailbox, action: 'deleted' };
+}
+
+/**
+ * Add a Gmail label to a message via X-GM-LABELS.
+ *
+ * @param {object} client   Connected imapflow client.
+ * @param {object} [opts]
+ * @param {number|string|Array<number|string>} [opts.uid]  Message UID, or an array of UIDs (batched into one IMAP command).
+ * @param {string} [opts.label]           Label/mailbox path to add.
+ * @param {string} [opts.mailbox='INBOX']
+ * @returns {Promise<{uid:number|number[], label:string, action:'added'}>}
+ */
+export async function addLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  await client.messageFlagsAdd(toRange(uid), [label], { uid: true, useLabels: true });
+  return { uid: toUid(uid), label, action: 'added' };
+}
+
+/**
+ * Remove a Gmail label from a message via X-GM-LABELS — or, when `mailbox` is that label's own
+ * mailbox, by a verified MOVE to All Mail (see dropLabel).
+ *
+ * @param {object} client   Connected imapflow client.
+ * @param {object} [opts]
+ * @param {number|string|Array<number|string>} [opts.uid]  Message UID, or an array of UIDs (batched into one IMAP command).
+ * @param {string} [opts.label]           Label/mailbox path to remove.
+ * @param {string} [opts.mailbox='INBOX']
+ * @returns {Promise<{uid:number|number[], label:string, action:'removed'}>}
+ */
+export async function removeLabel(client, { uid, label, mailbox = 'INBOX' } = {}) {
+  await dropLabel(client, { uid, label, mailbox, verb: 'unlabel', hint: `already removed from ${label}?` });
+  return { uid: toUid(uid), label, action: 'removed' };
+}
+
+/**
+ * Mark a message as read or unread by toggling the \Seen IMAP flag.
+ *
+ * @param {object} client   Connected imapflow client.
+ * @param {object} [opts]
+ * @param {number|string|Array<number|string>} [opts.uid]  Message UID, or an array of UIDs (batched into one IMAP command).
+ * @param {boolean} [opts.seen]           true → mark read, false → mark unread.
+ * @param {string} [opts.mailbox='INBOX']
+ * @returns {Promise<{uid:number|number[], seen:boolean, action:'read'|'unread'}>}
+ */
+export async function markMessage(client, { uid, seen, mailbox = 'INBOX' } = {}) {
+  await client.mailboxOpen(mailbox);
+  if (seen) await client.messageFlagsAdd(toRange(uid), ['\\Seen'], { uid: true });
+  else await client.messageFlagsRemove(toRange(uid), ['\\Seen'], { uid: true });
+  return { uid: toUid(uid), seen, action: seen ? 'read' : 'unread' };
+}
+
+export const TRASH = '[Gmail]/Trash';
+export const ALL_MAIL = '[Gmail]/All Mail';
+
+/**
+ * Gmail system labels (X-GM-LABELS names, lower-cased) → the mailbox that lists them. Any other
+ * label's mailbox is its own name.
+ */
+const SYSTEM_LABEL_MAILBOX = { '\\inbox': 'INBOX', '\\starred': '[Gmail]/Starred', '\\important': '[Gmail]/Important' };
+/**
+ * Is `mailbox` the mailbox that lists `label`? Case-insensitive: IMAP's INBOX and Gmail label
+ * names are both case-insensitive.
+ */
+const isOwnMailbox = (label, mailbox) => {
+  const l = String(label).toLowerCase();
+  return (SYSTEM_LABEL_MAILBOX[l] ?? l).toLowerCase() === String(mailbox).toLowerCase();
+};
+
+/**
+ * Verify the server actually performed a MOVE (shared by archive, move, trash and own-mailbox label removal):
+ *  - `messageMove` returning `false` means the command itself errored (e.g. bad destination) —
+ *    not a Gmail no-op — so that's a generic failure.
+ *  - Gmail is UIDPLUS and always returns COPYUID on a successful move, so a resolved result with
+ *    no `uidMap` (or an empty one) means 0 messages actually matched in `mailbox` — most likely
+ *    the uid was already moved out (e.g. an earlier archive in the same rule) or never existed
+ *    there. That's a user-fixable input error, not a server/network failure.
+ *  - A `uidMap` covering fewer than the requested (de-duplicated) uids means a partial move.
+ */
+async function moveVerified(client, { uid, mailbox, destination, verb, hint }) {
+  await client.mailboxOpen(mailbox);
+  const range = toRange(uid);
+  const res = await client.messageMove(range, destination, { uid: true });
+  if (res === false) {
+    throw new GmailError(`${verb} failed: server rejected MOVE of uid ${range} from ${mailbox}`);
+  }
+  const want = Array.isArray(uid) ? new Set(uid.map(Number)).size : 1;
+  const moved = res?.uidMap?.size ?? 0;
+  if (moved === 0) {
+    throw new InvalidInputError(`No message with uid ${range} in ${mailbox} (${hint}) — nothing to ${verb}`);
+  }
+  if (moved < want) {
+    throw new GmailError(`${verb} incomplete: moved ${moved} of ${want} from ${mailbox}`);
+  }
+}
+
+/**
+ * Remove a Gmail label. Gmail hides the selected mailbox's own label from X-GM-LABELS, so
+ * `STORE -X-GM-LABELS (L)` while L's mailbox is selected answers OK and changes nothing (same
+ * trap as archive). In that case removing L means leaving its mailbox: a verified MOVE to All
+ * Mail, which drops exactly L and keeps every other label. Otherwise a plain STORE.
+ */
+async function dropLabel(client, { uid, label, mailbox, verb, hint }) {
+  if (isOwnMailbox(label, mailbox)) {
+    await moveVerified(client, { uid, mailbox, destination: ALL_MAIL, verb, hint });
+    return;
+  }
+  await client.mailboxOpen(mailbox);
+  await client.messageFlagsRemove(toRange(uid), [label], { uid: true, useLabels: true });
+}
+
+/**
+ * Archive: MOVE to All Mail. Removing \Inbox via X-GM-LABELS is a silent no-op while INBOX is
+ * selected (Gmail hides the selected mailbox's own label), so MOVE is the only reliable idiom.
+ * The server result is verified (see moveVerified).
+ */
+export async function archiveMessage(client, { uid, mailbox = 'INBOX' } = {}) {
+  await moveVerified(client, { uid, mailbox, destination: ALL_MAIL, verb: 'archive', hint: 'already archived?' });
+  return { uid: toUid(uid), mailbox, action: 'archived' };
+}
+
+/** Move a message to a destination mailbox/label. The server result is verified. */
+export async function moveMessage(client, { uid, mailbox = 'INBOX', destination } = {}) {
+  await moveVerified(client, { uid, mailbox, destination, verb: 'move', hint: 'already moved?' });
+  return { uid: toUid(uid), from: mailbox, to: destination, action: 'moved' };
+}
+
+/** Move a message to Trash (recoverable). The server result is verified. */
+export async function trashMessage(client, { uid, mailbox = 'INBOX' } = {}) {
+  await moveVerified(client, { uid, mailbox, destination: TRASH, verb: 'trash', hint: 'already trashed or moved?' });
+  return { uid: toUid(uid), action: 'trashed' };
+}
+
+/** Toggle the Gmail \Starred label. Un-starring while [Gmail]/Starred is selected is a verified MOVE (see dropLabel). */
+export async function starMessage(client, { uid, on, mailbox = 'INBOX' } = {}) {
+  if (on) {
+    await client.mailboxOpen(mailbox);
+    await client.messageFlagsAdd(toRange(uid), ['\\Starred'], { uid: true, useLabels: true });
+  } else {
+    await dropLabel(client, { uid, label: '\\Starred', mailbox, verb: 'unstar', hint: 'not starred?' });
+  }
+  return { uid: toUid(uid), starred: !!on, action: on ? 'starred' : 'unstarred' };
+}
+
+/** Toggle the Gmail \Important label. Un-marking while [Gmail]/Important is selected is a verified MOVE (see dropLabel). */
+export async function importantMessage(client, { uid, on, mailbox = 'INBOX' } = {}) {
+  if (on) {
+    await client.mailboxOpen(mailbox);
+    await client.messageFlagsAdd(toRange(uid), ['\\Important'], { uid: true, useLabels: true });
+  } else {
+    await dropLabel(client, { uid, label: '\\Important', mailbox, verb: 'unmark important', hint: 'not important?' });
+  }
+  return { uid: toUid(uid), important: !!on, action: on ? 'marked-important' : 'unmarked-important' };
+}
+
+/** Create a Gmail label (IMAP mailbox). */
+export async function createLabel(client, { name } = {}) {
+  await client.mailboxCreate(name);
+  return { name, action: 'created' };
+}
+
+/** Delete a Gmail label (IMAP mailbox). */
+export async function deleteLabel(client, { name } = {}) {
+  await client.mailboxDelete(name);
+  return { name, action: 'deleted' };
+}
+
+/** Rename a Gmail label (IMAP mailbox). */
+export async function renameLabel(client, { name, newName } = {}) {
+  await client.mailboxRename(name, newName);
+  return { from: name, to: newName, action: 'renamed' };
+}

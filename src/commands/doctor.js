@@ -1,4 +1,5 @@
 import { MissingCredentialsError, MalformedConfigError } from '../lib/errors.js';
+import { openImapClient } from '../imap.js';
 
 /**
  * Health check: are credentials present, and does Gmail accept them over SMTP and IMAP?
@@ -29,6 +30,9 @@ export async function runDoctor(opts, deps) {
   }
   const allowlistEnforced = profile.allowlistEnforce;
 
+  const mode = profile.capabilities.mode;
+  const capabilities = [...profile.capabilities.allowed];
+
   let creds;
   try {
     creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
@@ -38,7 +42,7 @@ export async function runDoctor(opts, deps) {
       : err instanceof MalformedConfigError
         ? 'malformed'
         : 'error';
-    return { ok: false, profile: profile.name, credentials, smtp: 'skipped', imap: 'skipped', error: err.message, allowlist, allowlistEnforced };
+    return { ok: false, profile: profile.name, credentials, smtp: 'skipped', imap: 'skipped', error: err.message, allowlist, allowlistEnforced, mode, capabilities };
   }
 
   let smtpOk = false;
@@ -54,8 +58,7 @@ export async function runDoctor(opts, deps) {
 
   let imap;
   try {
-    const c = deps.createImapClient(creds, profile.imap || {});
-    await c.connect();
+    const c = await openImapClient(deps, creds, profile.imap || {});
     try {
       // Connected successfully; nothing else to probe here.
     } finally {
@@ -77,8 +80,10 @@ export async function runDoctor(opts, deps) {
       imap,
       allowlist,
       allowlistEnforced,
+      mode,
+      capabilities,
     };
   }
 
-  return { ok: smtpOk && imap === 'ok', profile: profile.name, user: creds.user, source: creds.source, credentials: 'ok', smtp, imap, allowlist, allowlistEnforced };
+  return { ok: smtpOk && imap === 'ok', profile: profile.name, user: creds.user, source: creds.source, credentials: 'ok', smtp, imap, allowlist, allowlistEnforced, mode, capabilities };
 }

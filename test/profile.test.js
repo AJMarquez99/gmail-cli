@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveProfile } from '../src/profile.js';
-import { InvalidInputError } from '../src/lib/errors.js';
+import { InvalidInputError, MalformedConfigError } from '../src/lib/errors.js';
 const ENV = { HOME: '/h' };
 
 describe('resolveProfile — legacy (no profiles)', () => {
@@ -83,5 +83,89 @@ describe('resolveProfile — sole profile & ambiguity', () => {
     const config = { profiles: { a: {}, b: {} } };
     expect(() => resolveProfile({ env: ENV, config, name: undefined })).toThrow(InvalidInputError);
     expect(() => resolveProfile({ env: ENV, config, name: undefined })).toThrow(/--profile/);
+  });
+});
+
+describe('resolveProfile — capabilities', () => {
+  it('legacy: unrestricted when no capability keys', () => {
+    const p = resolveProfile({ env: ENV, config: {}, name: undefined });
+    expect(p.capabilities.mode).toBe('unrestricted');
+    expect(p.capabilities.allowed.has('send')).toBe(true);
+  });
+  it('legacy: reads top-level capabilities', () => {
+    const p = resolveProfile({ env: ENV, config: { capabilities: ['read'] }, name: undefined });
+    expect(p.capabilities.mode).toBe('allow');
+    expect(p.capabilities.allowed.has('read')).toBe(true);
+    expect(p.capabilities.allowed.has('send')).toBe(false);
+  });
+  it('profile mode: reads the profile\'s capabilities/deny', () => {
+    const config = { profiles: { biz: { capabilities: ['read', 'organize', 'draft'] } } };
+    const p = resolveProfile({ env: ENV, config, name: 'biz' });
+    expect(p.capabilities.allowed.has('draft')).toBe(true);
+    expect(p.capabilities.allowed.has('send')).toBe(false);
+  });
+});
+
+describe('resolveProfile — imap overrides', () => {
+  it('returns per-profile imap overrides', () => {
+    const p = resolveProfile({ env: ENV, config: { profiles: { w: { imap: { host: 'h', port: 1 } } } }, name: 'w' });
+    expect(p.imap).toEqual({ host: 'h', port: 1 });
+  });
+  it('imap defaults to {} in both modes', () => {
+    expect(resolveProfile({ env: ENV, config: {}, name: undefined }).imap).toEqual({});
+    expect(resolveProfile({ env: ENV, config: { profiles: { w: {} } }, name: 'w' }).imap).toEqual({});
+  });
+});
+
+describe('resolveProfile — maxRecipients', () => {
+  it('legacy: defaults to 10 when absent', () => {
+    expect(resolveProfile({ env: ENV, config: {}, name: undefined }).maxRecipients).toBe(10);
+  });
+  it('legacy: a numeric string coerces to a number', () => {
+    expect(resolveProfile({ env: ENV, config: { maxRecipients: '5' }, name: undefined }).maxRecipients).toBe(5);
+  });
+  it('legacy: throws MalformedConfigError (exit 2) for a non-numeric value', () => {
+    const err = (() => {
+      try { resolveProfile({ env: ENV, config: { maxRecipients: 'abc' }, name: undefined }); return null; }
+      catch (e) { return e; }
+    })();
+    expect(err).toBeInstanceOf(MalformedConfigError);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/maxRecipients/);
+  });
+  it('legacy: throws MalformedConfigError for 0 (not >= 1)', () => {
+    expect(() => resolveProfile({ env: ENV, config: { maxRecipients: 0 }, name: undefined })).toThrow(
+      MalformedConfigError,
+    );
+  });
+  it('profile mode: defaults to 10 when absent', () => {
+    const config = { profiles: { work: {} } };
+    expect(resolveProfile({ env: ENV, config, name: 'work' }).maxRecipients).toBe(10);
+  });
+  it('profile mode: a numeric string coerces to a number', () => {
+    const config = { profiles: { work: { maxRecipients: '5' } } };
+    expect(resolveProfile({ env: ENV, config, name: 'work' }).maxRecipients).toBe(5);
+  });
+  it('profile mode: throws MalformedConfigError naming the fully-qualified key', () => {
+    const config = { profiles: { work: { maxRecipients: 'abc' } } };
+    const err = (() => {
+      try { resolveProfile({ env: ENV, config, name: 'work' }); return null; }
+      catch (e) { return e; }
+    })();
+    expect(err).toBeInstanceOf(MalformedConfigError);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/profiles\.work\.maxRecipients/);
+  });
+});
+
+describe('resolveProfile — rulesPath', () => {
+  it('legacy: default rules.json', () => {
+    const p = resolveProfile({ env: { HOME: '/h' }, config: {}, name: undefined });
+    expect(p.rulesPath).toBe('/h/.config/gmail-cli/rules.json');
+  });
+  it('profile mode: suffixed default', () => {
+    const config = { profiles: { work: {} }, defaultProfile: 'work' };
+    const p = resolveProfile({ env: { HOME: '/h' }, config, name: 'work' });
+    expect(p.rulesPath).toBe('/h/.config/gmail-cli/rules-work.json');
   });
 });

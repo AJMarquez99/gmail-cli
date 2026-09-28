@@ -6,6 +6,8 @@ credentials.json
 config.json
 allowlist.json
 sent.jsonl
+rules.json
+rules-*.json
 *.local
 .DS_Store
 
@@ -22,3 +24,7 @@ sent.jsonl
 
 # Local agent instructions (dot-ai convention block) — kept local, not committed.
 /CLAUDE.md
+
+# Local agent/tooling state
+.superpowers/
+.claude/settings.local.json

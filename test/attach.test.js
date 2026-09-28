@@ -3,8 +3,7 @@ import { runSend } from '../src/commands/send.js';
 import { InvalidInputError } from '../src/lib/errors.js';
 import { resolveProfile } from '../src/profile.js';
 
-function deps({ stat } = {}) {
-  const config = {};
+function deps({ stat, config = {}, cwd, realpath } = {}) {
   const transporter = { sendMail: vi.fn(async () => ({ messageId: '<id>', accepted: [], rejected: [] })) };
   return {
     resolveCredentials: () => ({ user: 'you@example.com', appPassword: 'pw' }),
@@ -13,30 +12,107 @@ function deps({ stat } = {}) {
     loadConfig: () => config,
     createTransport: () => transporter,
     statFile: stat || vi.fn(() => ({ isFile: () => true, size: 2048 })),
+    readFileBytes: vi.fn(() => Buffer.from('PDFDATA')),
+    realpath: realpath || ((p) => p),
+    cwd: cwd || (() => '/work'),
     now: () => 'T', appendLog: vi.fn(), readLog: () => [],
     _transporter: transporter,
   };
 }
 
 describe('attachments', () => {
-  it('attaches files by basename and reports filename + bytes', async () => {
+  it('attaches files by basename as in-process content buffers and reports filename + bytes', async () => {
     const d = deps();
-    const out = await runSend({ to: 'x@y.com', subject: 'S', body: 'b', attach: ['/tmp/quote.pdf'] }, d);
-    expect(d._transporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ attachments: [{ filename: 'quote.pdf', path: '/tmp/quote.pdf' }] }),
-    );
+    const out = await runSend({ to: 'x@y.com', subject: 'S', body: 'b', attach: ['quote.pdf'] }, d);
+    const sent = d._transporter.sendMail.mock.calls[0][0];
+    expect(sent.attachments).toHaveLength(1);
+    expect(sent.attachments[0].filename).toBe('quote.pdf');
+    expect(Buffer.isBuffer(sent.attachments[0].content)).toBe(true);
+    expect(sent.attachments[0].path).toBeUndefined();
+    expect(d.readFileBytes).toHaveBeenCalledWith('/work/quote.pdf');
     expect(out.attachments).toEqual([{ filename: 'quote.pdf', bytes: 2048 }]);
+  });
+
+  it('refuses an attachment resolving outside the root (absolute path escape)', async () => {
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['/etc/passwd'] }, deps()))
+      .rejects.toThrow(InvalidInputError);
+  });
+
+  it('refuses an attachment escaping the root via ..', async () => {
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['../../secret.txt'] }, deps()))
+      .rejects.toThrow(/outside/i);
   });
 
   it('rejects a missing attachment with exit-2 input error', async () => {
     const stat = vi.fn(() => { throw new Error('ENOENT'); });
-    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['/no/file.pdf'] }, deps({ stat })))
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['gone.pdf'] }, deps({ stat })))
       .rejects.toThrow(InvalidInputError);
   });
 
   it('rejects when total size exceeds 25MB', async () => {
     const stat = vi.fn(() => ({ isFile: () => true, size: 26 * 1024 * 1024 }));
-    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['/big.zip'] }, deps({ stat })))
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['big.zip'] }, deps({ stat })))
       .rejects.toThrow(/25\s?MB|limit/i);
+  });
+
+  it('checks the running size total before reading a file (never reads the one that would exceed 25MB)', async () => {
+    const sizes = { '/work/a.zip': 20 * 1024 * 1024, '/work/b.zip': 10 * 1024 * 1024 };
+    const stat = vi.fn((p) => ({ isFile: () => true, size: sizes[p] }));
+    const d = deps({ stat });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['a.zip', 'b.zip'] }, d))
+      .rejects.toThrow(/25\s?MB|limit/i);
+    expect(d.readFileBytes).toHaveBeenCalledTimes(1);
+    expect(d.readFileBytes).toHaveBeenCalledWith('/work/a.zip');
+  });
+
+  it('never reads a single attachment that alone exceeds 25MB', async () => {
+    const stat = vi.fn(() => ({ isFile: () => true, size: 26 * 1024 * 1024 }));
+    const d = deps({ stat });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['big.zip'] }, d)).rejects.toThrow(InvalidInputError);
+    expect(d.readFileBytes).not.toHaveBeenCalled();
+  });
+
+  it('refuses every attachment when the effective root is the filesystem root (e.g. an MCP server spawned at cwd /)', async () => {
+    const d = deps({ cwd: () => '/' });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['quote.pdf'] }, d))
+      .rejects.toThrow(InvalidInputError);
+    expect(d.readFileBytes).not.toHaveBeenCalled();
+    expect(d.statFile).not.toHaveBeenCalled();
+  });
+
+  it('refuses an attachment that is a symlink inside the root pointing outside it', async () => {
+    const d = deps({
+      realpath: (p) => (p === '/work/evil.pdf' ? '/etc/passwd' : p),
+    });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['evil.pdf'] }, d))
+      .rejects.toThrow(InvalidInputError);
+    expect(d.readFileBytes).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the root is a symlink whose real target is the filesystem root', async () => {
+    const d = deps({
+      cwd: () => '/var/attachroot-symlink',
+      realpath: (p) => (p === '/var/attachroot-symlink' ? '/' : p),
+    });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['secret.txt'] }, d))
+      .rejects.toThrow(InvalidInputError);
+    expect(d.statFile).not.toHaveBeenCalled();
+    expect(d.readFileBytes).not.toHaveBeenCalled();
+  });
+
+  it('allows a file inside the root when the root itself is a symlink', async () => {
+    const d = deps({
+      cwd: () => '/link-root',
+      realpath: (p) => {
+        if (p === '/link-root') return '/real-root';
+        if (p === '/link-root/quote.pdf') return '/real-root/quote.pdf';
+        return p;
+      },
+    });
+    const out = await runSend({ to: 'x@y.com', subject: 'S', body: 'b', attach: ['quote.pdf'] }, d);
+    expect(out.attachments).toEqual([{ filename: 'quote.pdf', bytes: 2048 }]);
+    // Read via the resolved real path, not the symlink path.
+    expect(d.readFileBytes).toHaveBeenCalledWith('/real-root/quote.pdf');
+    expect(d.statFile).toHaveBeenCalledWith('/real-root/quote.pdf');
   });
 });
