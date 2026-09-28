@@ -113,6 +113,46 @@ resolve profile → resolve creds → createImapClient → connect()
 same connect/teardown discipline. Read content is **never** written to the send log; HTML bodies are
 held in memory only.
 
+**`openImapClient(deps, creds, imapOpts)` (`src/imap.js`) is the single connect choke point** — every
+call site that opens an IMAP session (`withClient`, `doctor`, `draft send`) goes through it, not
+`createImapClient(...).connect()` directly. It races each `connect()` attempt against a hard deadline
+(`IMAP_DEFAULTS`: 15s connect / 10s greeting / 120s socket, overridable per profile via `profile.imap`),
+retries once on a fresh client after closing the stalled one, and throws `ImapTimeoutError` on final
+failure. A stalled TLS handshake or greeting must never hang a command forever — if you add a new
+IMAP-opening command, route it through `openImapClient`, not a bare `client.connect()`.
+
+## Organize invariants
+
+`archiveMessage` (`src/writer.js`) archives by **`MOVE` to `[Gmail]/All Mail`**, never by removing the
+`\Inbox` label via `messageFlagsRemove`. Gmail omits the currently-selected mailbox's own label from
+`X-GM-LABELS`, so removing `\Inbox` while INBOX is selected is a silent, successful no-op — the bug
+this shipped with before the v1.0.0 hardening pass. Every writer that reports success **verifies the
+server's response** (`messageMove`'s `uidMap` covers the requested UIDs) rather than returning a
+hand-built result unconditionally; a writer that can't confirm the mutation happened must throw, not
+report success on faith.
+
+## Attachment confinement
+
+`buildAttachments` (`src/compose.js`) resolves every `--attach` path against a configured `attachRoot`
+(default: cwd) and refuses anything that resolves outside it — lexically or after resolving symlinks
+(`deps.realpath`) — including a symlink *inside* the root whose real target escapes it. An `attachRoot`
+that itself resolves to the filesystem root (lexically or via a symlink) is refused outright, since
+that would make the containment check vacuous. Attachment bytes are read in-process and handed to
+`nodemailer`/the standalone `MailComposer` as buffers — `disableFileAccess`/`disableUrlAccess` are
+forced on both, so a crafted message object can never make the composer itself read a file or fetch a
+URL by path/href.
+
+## Locked boundary mode
+
+`isBoundaryLocked` (`src/lock.js`) is a single global (top-level `config.locked`, never
+`profiles.<name>.locked`) switch checked before any CLI-reachable action that could widen the
+boundary: allowlist edits, boundary-related config keys (`allowlist.*`, `attachRoot`, `maxRecipients`,
+`capabilities`, `deny`, `profiles`, `locked` itself — matched on the bare subkey so a fully-qualified
+`profiles.<name>.<key>` can't sneak past it), `login`, profile add/remove/caps changes, and any send
+that tries to disable enforcement. It governs only changes made **through the CLI** — see SECURITY.md
+for the explicit limit (an agent that controls the process's environment variables or the config
+directory can defeat it).
+
 ## Multi-account profiles
 
 `profile.js#resolveProfile` selects an account by a fixed ladder (flag → env → `config.defaultProfile`
