@@ -152,7 +152,8 @@ gmail label remove 1234 Work
 # label add/remove default to INBOX; override with --mailbox if the message is elsewhere
 gmail label add 1234 Archived --mailbox "[Gmail]/All Mail"
 # removing a label from within that label's own mailbox (e.g. --mailbox Work; case-insensitive) moves the
-# message to All Mail — later actions in the same rule then no longer see it
+# message to All Mail. In a rule, later actions no longer see it: a later archive/move/trash is reported
+# as an error, while a later label/star/important/mark:read is unverified and still reports applied
 
 # Mark a message as read or unread
 gmail mark 1234 --read

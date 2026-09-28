@@ -141,7 +141,7 @@ that label) instead of a `-X-GM-LABELS` STORE. The system-label→mailbox map (`
 `\Inbox`→`INBOX`, `\Starred`, `\Important`) sits beside `ALL_MAIL`/`TRASH`; any other label's mailbox
 is its own name, and the match is case-insensitive (`work` vs `Work`, `inbox` vs `INBOX`). So
 `label remove <uid> '\Inbox'` from INBOX is equivalent to `archive`. Because the message leaves the
-rule's mailbox, later actions in the same rule no longer see it (they land in the rule's errors),
+rule's mailbox, later actions in the same rule no longer see it (a later `archive`/`move`/`trash` lands in the rule's errors; a later `label`/`star`/`important`/`mark:read` STORE is unverified and reports applied),
 exactly as after `archive`/`move`/`trash`. Never STORE `-<label>`
 while `<label>`'s mailbox is selected (a regression test in `test/writer.test.js` guards this). Adding
 a label, and `\Seen` (a real IMAP flag), are unaffected. The flag/label writers (`addLabel`,
