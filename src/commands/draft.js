@@ -3,6 +3,7 @@ import { buildMessage, buildRawMime, toList } from '../compose.js';
 import { appendDraft, deleteMessage, fetchRawMessage, DRAFTS } from '../writer.js';
 import { InvalidInputError } from '../lib/errors.js';
 import { resolveRecipients, enforceAllowlist, logSend } from '../transmit.js';
+import { openImapClient } from '../imap.js';
 
 /** Create a draft: assemble the message (NO allowlist — nothing transmits) and APPEND to Drafts. */
 export async function runDraftCreate(opts, deps) {
@@ -28,8 +29,7 @@ export async function runDraftSend(opts, deps) {
   const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
 
   // Single IMAP session: fetch the draft, (after SMTP send) delete it, then close.
-  const client = deps.createImapClient(creds, profile.imap || {});
-  await client.connect();
+  const client = await openImapClient(deps, creds, profile.imap || {});
   try {
     // 1. Fetch the raw draft + parse recipients.
     const raw = await fetchRawMessage(client, { uid: opts.uid, mailbox: DRAFTS });

@@ -56,6 +56,12 @@ export class RecipientNotAllowedError extends GmailError {
   }
 }
 
+export class ImapTimeoutError extends GmailError {
+  constructor(ms) {
+    super(`IMAP connection to Gmail timed out after ${ms}ms (tried twice). Check your network and retry.`);
+  }
+}
+
 export class CapabilityDeniedError extends GmailError {
   constructor(bucket, profileName) {
     super(
