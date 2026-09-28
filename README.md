@@ -336,12 +336,14 @@ The `--no-allowlist` flag overrides the config for a single send regardless of w
 ### Sealing the boundary (locked mode)
 
 By default, anything that can run `gmail` can also edit its own boundary (`gmail allow add`,
-`gmail config set allowlist.enforce false`, `--no-allowlist`, …). To take that away from an agent,
-a human locks the boundary — either per environment or persistently:
+`gmail config set allowlist.enforce false`, `--no-allowlist`, …). Locking the boundary makes the
+CLI refuse those boundary-widening commands. A human turns it on per environment or persistently:
 
 ```bash
 export GMAIL_CLI_LOCKED=1          # or "true"; set it in the environment the agent runs in
-# or, persistently, by hand-editing config.json:  { "locked": true }
+# or, persistently (a global key — always written at the top level of config.json,
+# never per profile, whatever profile is active):
+gmail config set locked true       # equivalent to hand-editing config.json: { "locked": true }
 ```
 
 While locked, these all refuse with **exit `3`** (nothing is written or sent):
@@ -357,6 +359,13 @@ While locked, these all refuse with **exit `3`** (nothing is written or sent):
 Everything else (reading, enforced sends, drafts, `profile use`, non-boundary config such as
 `fromName`) works normally. Unlocking is a human action: clear `GMAIL_CLI_LOCKED` and set
 `locked` to `false` in `config.json` by hand.
+
+**What the lock does not cover.** The lock only governs changes made *through the CLI*. An agent
+that can set environment variables (`GMAIL_CLI_SETTINGS`, `GMAIL_ALLOWLIST`, `GMAIL_CLI_CONFIG`,
+`GMAIL_USER`/`GMAIL_APP_PASSWORD`, or `GMAIL_CLI_LOCKED` itself) or write the config directory can
+defeat it — by pointing the CLI at different files, or by editing them directly. For a real seal,
+fix the environment in the agent's launcher (so the agent cannot change it) and make
+`~/.config/gmail-cli` non-writable by the agent. See [SECURITY.md](SECURITY.md).
 
 ## Permissions & capabilities
 

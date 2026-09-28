@@ -149,3 +149,48 @@ describe('locked boundary refuses agent-reachable widening', () => {
     expect(r.to).toEqual(['x@y.com', 'other@z.com']);
   });
 });
+
+describe('global keys (locked, defaultProfile) are top-level only', () => {
+  const unlockedDeps = (file) => ({ ...cfgDeps(file), isBoundaryLocked: () => false });
+  const written = (d) => JSON.parse(d.writeFile.mock.calls[0][1]);
+  const profileCfg = JSON.stringify({ profiles: { work: {}, home: {} }, defaultProfile: 'work' });
+
+  it('profile-mode `config set locked true` writes top-level locked and actually locks', async () => {
+    const d = unlockedDeps(profileCfg);
+    await runConfigSet({ key: 'locked', value: 'true' }, d);
+    const w = written(d);
+    expect(w.locked).toBe(true);
+    expect(w.profiles.work.locked).toBeUndefined();
+    expect(isBoundaryLocked({ env: {}, config: w })).toBe(true);
+  });
+  it('`--profile home config set locked true` still writes top-level', async () => {
+    const d = unlockedDeps(profileCfg);
+    await runConfigSet({ key: 'locked', value: 'true', profile: 'home' }, d);
+    const w = written(d);
+    expect(w.locked).toBe(true);
+    expect(w.profiles.home.locked).toBeUndefined();
+  });
+  it('fully-qualified profiles.<name>.locked is rejected with exit 2', async () => {
+    const d = unlockedDeps(profileCfg);
+    const err = await runConfigSet({ key: 'profiles.work.locked', value: 'true' }, d).catch((e) => e);
+    expect(err.exitCode).toBe(EXIT_CODES.CONFIG);
+    expect(err.message).toMatch(/global key/);
+    expect(d.writeFile).not.toHaveBeenCalled();
+  });
+  it('defaultProfile is top-level in profile mode; fully-qualified form is rejected with exit 2', async () => {
+    const d = unlockedDeps(profileCfg);
+    await runConfigSet({ key: 'defaultProfile', value: 'home' }, d);
+    const w = written(d);
+    expect(w.defaultProfile).toBe('home');
+    expect(w.profiles.work.defaultProfile).toBeUndefined();
+    const d2 = unlockedDeps(profileCfg);
+    const err = await runConfigSet({ key: 'profiles.work.defaultProfile', value: 'home' }, d2).catch((e) => e);
+    expect(err.exitCode).toBe(EXIT_CODES.CONFIG);
+  });
+  it('while locked, set locked false / unset locked still refuse with exit 3', async () => {
+    const d = cfgDeps(JSON.stringify({ profiles: { work: {} }, locked: true }));
+    await expect(runConfigSet({ key: 'locked', value: 'false' }, d)).rejects.toBeInstanceOf(BoundaryLockedError);
+    await expect(runConfigUnset({ key: 'locked' }, d)).rejects.toBeInstanceOf(BoundaryLockedError);
+    expect(d.writeFile).not.toHaveBeenCalled();
+  });
+});

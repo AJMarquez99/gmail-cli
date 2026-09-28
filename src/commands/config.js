@@ -12,6 +12,7 @@ const KNOWN_KEYS = new Set([
   'sendLog.logBody',
   'allowlist.enforce',
   'locked',
+  'defaultProfile',
   'attachRoot',
   'credentialsPath',
   'allowlistPath',
@@ -24,16 +25,26 @@ const KNOWN_KEYS = new Set([
   'imap.socketTimeout',
 ]);
 
+// Global (top-level-only) keys: read from the config root, never per profile. `locked` is only
+// honored at the top level by isBoundaryLocked; `defaultProfile` selects among profiles.
+const GLOBAL_KEYS = new Set(['locked', 'defaultProfile']);
+
 /**
  * Compute the dotted key path to read/write in the config object.
  * A fully-qualified `profiles.<name>.<key>` is an absolute path (the profile must exist);
- * otherwise legacy uses the bare key and profile mode prefixes `profiles.<active>.`.
+ * otherwise legacy uses the bare key and profile mode prefixes `profiles.<active>.` — except
+ * GLOBAL_KEYS, which are always top-level (and rejected in fully-qualified form).
  */
 function keyPath(profile, key, config) {
   if (key.startsWith('profiles.')) {
     const [, name, ...rest] = key.split('.');
     if (!name || rest.length === 0) {
       throw new InvalidInputError(`Key "${key}" must name a setting: profiles.<name>.<key>`);
+    }
+    if (GLOBAL_KEYS.has(rest[0])) {
+      throw new InvalidInputError(
+        `"${rest[0]}" is a global key, not a per-profile setting — use \`gmail config set ${rest.join('.')} ...\` (it is always written at the top level).`,
+      );
     }
     if (!config.profiles?.[name]) {
       throw new InvalidInputError(
@@ -42,7 +53,7 @@ function keyPath(profile, key, config) {
     }
     return key;
   }
-  if (profile.name === '(default)') return key;
+  if (profile.name === '(default)' || GLOBAL_KEYS.has(key.split('.')[0])) return key;
   return `profiles.${profile.name}.${key}`;
 }
 
@@ -60,6 +71,7 @@ const BOUNDARY_KEYS = new Set([
   'capabilities',
   'deny',
   'locked',
+  'defaultProfile',
   'profiles',
 ]);
 
