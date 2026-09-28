@@ -18,7 +18,7 @@ handlers never import `fs`/`nodemailer`/`imapflow` directly; they receive `deps`
 
 - **Production:** `buildProgram(deps = defaultDeps)` in `src/cli.js` wires the real implementations.
 - **Tests:** pass a hand-built fake `deps` with `vi.fn()` stubs — no real SMTP/IMAP/FS in CI. This
-  is why there are ~265 tests and zero network calls.
+  is why there are 667 tests across 48 files (`npm run test:run`) and zero network calls.
 
 If you add a new kind of side effect, add it to `defaultDeps` rather than importing it inline.
 
@@ -55,16 +55,26 @@ objects — they don't print or set exit codes themselves.
 | `allowlist.js` | Load allowlist + `makeAllowChecker()` (fail-closed recipient gate) |
 | `config.js` | Load/merge non-secret `config.json` |
 | `transport.js` | `createGmailTransport()` — Nodemailer Gmail SMTP |
-| `imap.js` | `createImapClient()` — `imapflow` connection factory |
-| `reader.js` | IMAP read + light-write ops over an already-connected client |
+| `imap.js` | `createImapClient()` (connection factory) + `openImapClient()` (the single connect choke point, see below) |
+| `reader.js` | IMAP **read-only** ops over an already-connected client (`listMessages`/`searchMessages`/`showMessage`/`getThread`/`listLabels`/`countMessages`) |
+| `writer.js` | All IMAP **write** ops (`addLabel`/`removeLabel`/`archiveMessage`/`markMessage`/`starMessage`/`importantMessage`/`moveMessage`/`trashMessage`/`deleteMessage`, draft append/fetch) |
+| `compose.js` | `buildAttachments`/message assembly — attachment path confinement (see below) |
+| `transmit.js` | `resolveRecipients()` — alias expansion + allowlist enforcement + `maxRecipients` cap, shared by send/reply/forward |
+| `lock.js` | `isBoundaryLocked()` — the locked-boundary switch (see below) |
+| `capabilities.js` | `COMMAND_CAPABILITY` map + `enforceCapability()` — per-profile capability gate (see below) |
+| `rules/engine.js` | `applyRules()` — runs parsed rules over a connected client |
+| `rules/actions.js` | Parse/execute one rule action (`label`/`unlabel`/`archive`/`mark-read`/`star`/`important`/`move`/`trash`) against `writer.js` |
+| `rules/storage.js` | Load/save `rules.json` |
+| `rules/xml.js` | Export rules as Gmail filter XML |
 | `lib/jsonfile.js` | `readJson` — the single JSON-parse choke point (throws `MalformedConfigError`) + write/path helpers |
+| `lib/permissions.js` | `tightenMode()` — re-chmod a config/allowlist/rules/send-log file to `0600` after every write (self-heals files left at looser modes by older versions) |
 | `lib/sendlog.js` | Append/read the metadata-only send log (JSONL) |
 | `lib/normalize.js` | Normalize a parsed message into the CLI's shape |
 | `lib/markdown.js` | Markdown → inline-styled HTML (for `send --markdown`) |
 | `lib/templates.js` | HTML email styling helpers |
 | `lib/errors.js` | Error classes + exit-code map |
 | `lib/format.js` | All `format*` table renderers |
-| `commands/*` | One file per command group (send/doctor/log/init/login/allow/config/profile/read/label/mark) |
+| `commands/*` | One file per command group (send/doctor/log/init/login/allow/config/profile/read/label/mark/draft/reply/organize/rules/whoami) |
 | `version.js` | `VERSION` — single source, read from `package.json` (used by CLI `--version` and the MCP server) |
 | `mcp/tools.js` | SDK-agnostic `TOOLS` table (name/description/inputSchema/command/mapArgs) |
 | `mcp/server.js` | MCP SDK binding: `buildMcpServer`/`makeToolHandler`/`startMcpServer` |
@@ -98,6 +108,29 @@ there is no OAuth. `send` assembles the message (subject/body/html/attachments/t
 runs it through the allowlist checker, then sends — unless `--dry-run`, which assembles and previews
 without sending or logging.
 
+`transmit.js#resolveRecipients` also enforces **`maxRecipients`** (`profile.maxRecipients`, default
+`10`): the combined `to`+`cc`+`bcc` count is checked up front, before allowlist resolution, and a
+send exceeding it throws `TooManyRecipientsError` (exit `2`) rather than fanning out.
+
+## Capabilities (per-profile scoping) & the MCP gate
+
+`capabilities.js#COMMAND_CAPABILITY` maps each Commander command path (e.g. `'read list'`,
+`'draft create'`) to a required capability bucket — `read`, `organize`, `draft`, `send`, `delete`
+(`CAPS`/`BUCKETS`) — or a function of `opts` for flag-dependent commands (`reply` needs `draft` with
+`--draft`, else `send`). A profile scopes itself with either `capabilities: [...]` (allowlist) or
+`deny: [...]` (denylist) in its config — not both; absent either key, the profile is unrestricted.
+**A command path with no entry in `COMMAND_CAPABILITY` is always-allowed** — the coverage-guard test
+(`test/capability-gate.test.js`) fails if a registered CLI command is missing from the map, so this
+never silently happens by omission, but it does mean a new command must be added deliberately (see
+[[adding-a-command]]).
+
+`enforceCapability(commandPath, opts, deps)` is the single choke point: it resolves the required
+bucket and throws `CapabilityDeniedError` (exit `4`) if the active profile lacks it. It's called from
+both `src/cli.js`'s `handle()` wrapper (via each command's `capabilityPath`) and
+`mcp/server.js#makeToolHandler` (via each MCP tool's `capabilityPath` in `mcp/tools.js`) — so a
+profile scoped down to `read` cannot `send` through either front end. Exit `4` is a deliberate
+extension past the shared `0`–`3` exit family (see the error/exit-code table below).
+
 ## IMAP read path & connection lifecycle
 
 Reads use `imapflow`; raw messages are parsed by `mailparser` (`deps.parseMessage`) and shaped by
@@ -109,9 +142,9 @@ resolve profile → resolve creds → createImapClient → connect()
    → try { fn(client) } finally { client.logout() }   ← always logs out, even on throw
 ```
 
-`withClient` is exported and **reused by `label` and `mark`**, so every IMAP operation shares the
-same connect/teardown discipline. Read content is **never** written to the send log; HTML bodies are
-held in memory only.
+`withClient` is exported and **reused by `draft`, `label`, `mark`, `organize`, `reply`, and
+`rules`** (in addition to `read` itself), so every IMAP operation shares the same connect/teardown
+discipline. Read content is **never** written to the send log; HTML bodies are held in memory only.
 
 **`openImapClient(deps, creds, imapOpts)` (`src/imap.js`) is the single connect choke point** — every
 call site that opens an IMAP session (`withClient`, `doctor`, `draft send`) goes through it, not
