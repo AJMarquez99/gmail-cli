@@ -3,7 +3,7 @@ import { buildMessage, buildRawMime } from '../src/compose.js';
 import { simpleParser } from 'mailparser';
 
 const ctx = { profile: { fromName: null, replyTo: null, signature: null }, creds: { user: 'me@x.com' } };
-const deps = { statFile: () => ({ isFile: () => true, size: 10 }) };
+const deps = { statFile: () => ({ isFile: () => true, size: 10 }), readFileBytes: () => Buffer.from('x'), cwd: () => '/work' };
 
 describe('buildMessage', () => {
   it('assembles from/to/cc/bcc/subject and text body', () => {

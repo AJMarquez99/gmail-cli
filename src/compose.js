@@ -1,4 +1,4 @@
-import { basename, resolve as resolvePath } from 'node:path';
+import { basename, resolve as resolvePath, sep } from 'node:path';
 import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { InvalidInputError } from './lib/errors.js';
 import { renderMarkdown } from './lib/markdown.js';
@@ -17,16 +17,22 @@ export function toList(value) {
   return arr.flatMap((entry) => String(entry).split(',')).map((s) => s.trim()).filter(Boolean);
 }
 
-export function buildAttachments(paths, deps) {
+export function buildAttachments(paths, deps, { root } = {}) {
+  const base = resolvePath(root || deps.cwd());
+  const prefix = base.endsWith(sep) ? base : base + sep;
   const out = [];
   let total = 0;
   for (const p of paths) {
-    const abs = resolvePath(p);
+    const abs = resolvePath(base, p);
+    if (abs !== base && !abs.startsWith(prefix)) {
+      throw new InvalidInputError(`Refusing to attach a file outside ${base}: ${p}`);
+    }
     let stat;
     try { stat = deps.statFile(abs); } catch { throw new InvalidInputError(`Attachment not found: ${abs}`); }
     if (!stat.isFile()) throw new InvalidInputError(`Attachment is not a file: ${abs}`);
+    const content = deps.readFileBytes(abs);
     total += stat.size;
-    out.push({ filename: basename(abs), path: abs, bytes: stat.size });
+    out.push({ filename: basename(abs), content, bytes: stat.size });
   }
   if (total > GMAIL_MAX_BYTES) {
     throw new InvalidInputError(`Attachments total ${(total / 1048576).toFixed(1)}MB exceeds Gmail's 25MB limit.`);
@@ -61,7 +67,7 @@ export function buildMessage({ to, cc, bcc }, opts, { profile, creds }, deps) {
     if (text != null && sig.text) text = `${text}\n\n${sig.text}`;
     if (html != null && sig.html) html = `${html}${sig.html}`;
   }
-  const attachments = (opts.attach && opts.attach.length) ? buildAttachments(toList(opts.attach), deps) : [];
+  const attachments = (opts.attach && opts.attach.length) ? buildAttachments(toList(opts.attach), deps, { root: profile.attachRoot }) : [];
   const fromName = opts.fromName || profile.fromName;
   const replyTo = opts.replyTo || profile.replyTo;
   const refs = toList(opts.references);
@@ -76,7 +82,7 @@ export function buildMessage({ to, cc, bcc }, opts, { profile, creds }, deps) {
   if (replyTo) message.replyTo = replyTo;
   if (opts.inReplyTo) { message.inReplyTo = opts.inReplyTo; message.references = refs.length ? refs : [opts.inReplyTo]; }
   else if (refs.length) message.references = refs;
-  if (attachments.length) message.attachments = attachments.map(({ filename, path }) => ({ filename, path }));
+  if (attachments.length) message.attachments = attachments.map(({ filename, content }) => ({ filename, content }));
 
   return { message, attachmentsOut: attachments.map(({ filename, bytes }) => ({ filename, bytes })) };
 }
