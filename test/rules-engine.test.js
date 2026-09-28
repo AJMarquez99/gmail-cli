@@ -114,6 +114,34 @@ describe('applyRules', () => {
     expect(rep.rules[0].applied).toEqual([]);
   });
 
+  it('archive then trash over the same uids: trash moving nothing lands in errors, not applied', async () => {
+    const calls = [];
+    const client = {
+      calls,
+      mailboxOpen: async (m) => calls.push(['open', m]),
+      search: async (q, o) => { calls.push(['search', q, o]); return [5, 6]; },
+      messageFlagsAdd: async (u, f, o) => calls.push(['add', u, f, o]),
+      messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
+      messageMove: async (u, d, o) => {
+        calls.push(['move', u, d, o]);
+        // archive already moved the uids out of INBOX, so the trash MOVE matches nothing:
+        // imapflow resolves with no COPYUID/uidMap.
+        if (d === '[Gmail]/Trash') return { path: 'INBOX', destination: d };
+        return { uidMap: uidMapFor(u) };
+      },
+    };
+    const rules = [{ id: 'r1', match: 'from:x', actions: ['archive', 'trash'], mailbox: 'INBOX' }];
+    const rep = await applyRules(client, rules, { profileCan: allow }, {});
+    expect(rep.rules[0].applied).toEqual(expect.arrayContaining([
+      { uid: 5, action: 'archive' },
+      { uid: 6, action: 'archive' },
+    ]));
+    expect(rep.rules[0].applied.some((e) => e.action === 'trash')).toBe(false);
+    const trashErrs = rep.rules[0].errors.filter((e) => e.action === 'trash');
+    expect(trashErrs.map((e) => e.uid).sort()).toEqual([5, 6]);
+    for (const e of trashErrs) expect(e.error).toMatch(/trash/);
+  });
+
   it('error in a batched action records an error entry for every uid in the batch', async () => {
     const calls = [];
     const errClient = {

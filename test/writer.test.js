@@ -316,6 +316,47 @@ it('trashMessage moves to the Trash mailbox', async () => {
   expect(c.calls).toContainEqual(['move', 7, TRASH, { uid: true }]);
   expect(r).toEqual({ uid: 7, action: 'trashed' });
 });
+// Move and trash share archive's server-result verification (no silent "moved"/"trashed").
+const noUidMap = (dest) => ({ mailboxOpen: async () => {}, messageMove: async () => ({ path: 'INBOX', destination: dest }) });
+it('trashMessage throws InvalidInputError (exit 2) naming verb, uid and mailbox when no uidMap (nothing moved)', async () => {
+  const err = await trashMessage(noUidMap(TRASH), { uid: 7, mailbox: 'INBOX' }).catch((e) => e);
+  expect(err).toBeInstanceOf(InvalidInputError);
+  expect(err.exitCode).toBe(2);
+  expect(err.message).toMatch(/trash/);
+  expect(err.message).toMatch(/uid 7/);
+  expect(err.message).toMatch(/INBOX/);
+});
+it('moveMessage throws InvalidInputError (exit 2) naming verb, uid and mailbox when no uidMap (nothing moved)', async () => {
+  const err = await moveMessage(noUidMap('Saved'), { uid: 7, mailbox: 'INBOX', destination: 'Saved' }).catch((e) => e);
+  expect(err).toBeInstanceOf(InvalidInputError);
+  expect(err.exitCode).toBe(2);
+  expect(err.message).toMatch(/move/);
+  expect(err.message).toMatch(/uid 7/);
+  expect(err.message).toMatch(/INBOX/);
+});
+it('trashMessage / moveMessage throw GmailError (exit 1) when messageMove returns false', async () => {
+  const c = { mailboxOpen: async () => {}, messageMove: async () => false };
+  const t = await trashMessage(c, { uid: 7 }).catch((e) => e);
+  expect(t).toBeInstanceOf(GmailError);
+  expect(t).not.toBeInstanceOf(InvalidInputError);
+  expect(t.exitCode).toBe(1);
+  expect(t.message).toMatch(/trash failed/i);
+  const m = await moveMessage(c, { uid: 7, destination: 'Saved' }).catch((e) => e);
+  expect(m.exitCode).toBe(1);
+  expect(m.message).toMatch(/move failed/i);
+});
+it('trashMessage / moveMessage throw GmailError on a partial move', async () => {
+  const c = { mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900]]) }) };
+  const t = await trashMessage(c, { uid: [5, 6] }).catch((e) => e);
+  expect(t).toBeInstanceOf(GmailError);
+  expect(t).not.toBeInstanceOf(InvalidInputError);
+  expect(t.message).toMatch(/1 of 2/);
+  await expect(moveMessage(c, { uid: [5, 6], destination: 'Saved' })).rejects.toThrow(/1 of 2/);
+});
+it('trashMessage de-duplicates requested uids ([5,5] with 1 moved succeeds)', async () => {
+  const c = { mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900]]) }) };
+  await expect(trashMessage(c, { uid: [5, 5] })).resolves.toMatchObject({ action: 'trashed' });
+});
 it('starMessage adds \\Starred when on, removes when off', async () => {
   const c = mkClient();
   await starMessage(c, { uid: '7', on: true, mailbox: 'INBOX' });

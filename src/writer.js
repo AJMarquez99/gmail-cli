@@ -82,47 +82,51 @@ export const TRASH = '[Gmail]/Trash';
 export const ALL_MAIL = '[Gmail]/All Mail';
 
 /**
- * Archive: MOVE to All Mail. Removing \Inbox via X-GM-LABELS is a silent no-op while INBOX is
- * selected (Gmail hides the selected mailbox's own label), so MOVE is the only reliable idiom.
- *
- * Verifies the server actually moved the message(s):
+ * Verify the server actually performed a MOVE (shared by archive, move and trash):
  *  - `messageMove` returning `false` means the command itself errored (e.g. bad destination) —
  *    not a Gmail no-op — so that's a generic failure.
  *  - Gmail is UIDPLUS and always returns COPYUID on a successful move, so a resolved result with
  *    no `uidMap` (or an empty one) means 0 messages actually matched in `mailbox` — most likely
- *    the uid is already archived or never existed there. That's a user-fixable input error, not a
- *    server/network failure.
+ *    the uid was already moved out (e.g. an earlier archive in the same rule) or never existed
+ *    there. That's a user-fixable input error, not a server/network failure.
  *  - A `uidMap` covering fewer than the requested (de-duplicated) uids means a partial move.
  */
-export async function archiveMessage(client, { uid, mailbox = 'INBOX' } = {}) {
+async function moveVerified(client, { uid, mailbox, destination, verb, hint }) {
   await client.mailboxOpen(mailbox);
   const range = toRange(uid);
-  const res = await client.messageMove(range, ALL_MAIL, { uid: true });
+  const res = await client.messageMove(range, destination, { uid: true });
   if (res === false) {
-    throw new GmailError(`archive failed: server rejected MOVE of uid ${range} from ${mailbox}`);
+    throw new GmailError(`${verb} failed: server rejected MOVE of uid ${range} from ${mailbox}`);
   }
   const want = Array.isArray(uid) ? new Set(uid.map(Number)).size : 1;
   const moved = res?.uidMap?.size ?? 0;
   if (moved === 0) {
-    throw new InvalidInputError(`No message with uid ${range} in ${mailbox} (already archived?)`);
+    throw new InvalidInputError(`No message with uid ${range} in ${mailbox} (${hint}) — nothing to ${verb}`);
   }
   if (moved < want) {
-    throw new GmailError(`archive incomplete: moved ${moved} of ${want} from ${mailbox}`);
+    throw new GmailError(`${verb} incomplete: moved ${moved} of ${want} from ${mailbox}`);
   }
+}
+
+/**
+ * Archive: MOVE to All Mail. Removing \Inbox via X-GM-LABELS is a silent no-op while INBOX is
+ * selected (Gmail hides the selected mailbox's own label), so MOVE is the only reliable idiom.
+ * The server result is verified (see moveVerified).
+ */
+export async function archiveMessage(client, { uid, mailbox = 'INBOX' } = {}) {
+  await moveVerified(client, { uid, mailbox, destination: ALL_MAIL, verb: 'archive', hint: 'already archived?' });
   return { uid: toUid(uid), mailbox, action: 'archived' };
 }
 
-/** Move a message to a destination mailbox/label. */
+/** Move a message to a destination mailbox/label. The server result is verified. */
 export async function moveMessage(client, { uid, mailbox = 'INBOX', destination } = {}) {
-  await client.mailboxOpen(mailbox);
-  await client.messageMove(toRange(uid), destination, { uid: true });
+  await moveVerified(client, { uid, mailbox, destination, verb: 'move', hint: 'already moved?' });
   return { uid: toUid(uid), from: mailbox, to: destination, action: 'moved' };
 }
 
-/** Move a message to Trash (recoverable). */
+/** Move a message to Trash (recoverable). The server result is verified. */
 export async function trashMessage(client, { uid, mailbox = 'INBOX' } = {}) {
-  await client.mailboxOpen(mailbox);
-  await client.messageMove(toRange(uid), TRASH, { uid: true });
+  await moveVerified(client, { uid, mailbox, destination: TRASH, verb: 'trash', hint: 'already trashed or moved?' });
   return { uid: toUid(uid), action: 'trashed' };
 }
 
