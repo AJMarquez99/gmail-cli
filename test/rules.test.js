@@ -95,7 +95,8 @@ describe('runRulesApply (direct)', () => {
     const rep = await runRulesApply({}, deps);
     expect(rep.rules[0].applied).toEqual([{ uid: 5, action: 'archive' }]);
     expect(rep.rules[0].skipped).toEqual([{ action: 'trash', reason: 'capability:delete' }]);
-    expect(client.calls.some((c) => c[0] === 'move')).toBe(false); // trash never executed
+    // trash never executed: no move to Trash (archive's own move to All Mail is expected)
+    expect(client.calls.some((c) => c[0] === 'move' && c[2] === '[Gmail]/Trash')).toBe(false);
     expect(client.logout).toHaveBeenCalled(); // withClient always logs out
   });
 

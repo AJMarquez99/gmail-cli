@@ -1,3 +1,5 @@
+import { GmailError } from './lib/errors.js';
+
 export const DRAFTS = '[Gmail]/Drafts';
 
 /** Normalize a UID scalar or array to an IMAP sequence set. */
@@ -77,11 +79,21 @@ export async function markMessage(client, { uid, seen, mailbox = 'INBOX' } = {})
 }
 
 export const TRASH = '[Gmail]/Trash';
+export const ALL_MAIL = '[Gmail]/All Mail';
 
-/** Archive: remove the Gmail \Inbox system label via X-GM-LABELS. */
+/**
+ * Archive: MOVE to All Mail. Removing \Inbox via X-GM-LABELS is a silent no-op while INBOX is
+ * selected (Gmail hides the selected mailbox's own label), so MOVE is the only reliable idiom.
+ * Throws when the server reports it moved nothing / fewer messages than requested.
+ */
 export async function archiveMessage(client, { uid, mailbox = 'INBOX' } = {}) {
   await client.mailboxOpen(mailbox);
-  await client.messageFlagsRemove(toRange(uid), ['\\Inbox'], { uid: true, useLabels: true });
+  const res = await client.messageMove(toRange(uid), ALL_MAIL, { uid: true });
+  const want = Array.isArray(uid) ? uid.length : 1;
+  if (res === false) throw new GmailError(`archive failed: uid ${toRange(uid)} not found in ${mailbox}`);
+  if (res?.uidMap && res.uidMap.size < want) {
+    throw new GmailError(`archive incomplete: moved ${res.uidMap.size} of ${want} from ${mailbox}`);
+  }
   return { uid: toUid(uid), mailbox, action: 'archived' };
 }
 

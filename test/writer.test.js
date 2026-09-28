@@ -245,7 +245,7 @@ describe('fetchRawMessage', () => {
 // ---------------------------------------------------------------------------
 
 import { archiveMessage, moveMessage, trashMessage, starMessage, importantMessage,
-  createLabel, deleteLabel, renameLabel, TRASH } from '../src/writer.js';
+  createLabel, deleteLabel, renameLabel, TRASH, ALL_MAIL } from '../src/writer.js';
 
 const mkClient = () => {
   const calls = [];
@@ -260,11 +260,30 @@ const mkClient = () => {
   };
 };
 
-it('archiveMessage removes the \\Inbox label via X-GM-LABELS', async () => {
+it('archiveMessage MOVEs to All Mail and never STOREs -\\Inbox', async () => {
   const c = mkClient();
   const r = await archiveMessage(c, { uid: '7', mailbox: 'INBOX' });
-  expect(c.calls).toContainEqual(['remove', 7, ['\\Inbox'], { uid: true, useLabels: true }]);
+  expect(c.calls).toContainEqual(['move', 7, ALL_MAIL, { uid: true }]);
+  expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
   expect(r).toEqual({ uid: 7, mailbox: 'INBOX', action: 'archived' });
+});
+it('archiveMessage throws when the server moved nothing (uid not in mailbox)', async () => {
+  const c = { mailboxOpen: async () => {}, messageMove: async () => false };
+  await expect(archiveMessage(c, { uid: 7 })).rejects.toThrow(/archive.*7/i);
+});
+it('archiveMessage throws when uidMap covers fewer uids than requested', async () => {
+  const c = { mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900]]) }) };
+  await expect(archiveMessage(c, { uid: [5, 6] })).rejects.toThrow(/1 of 2/);
+});
+it('archiveMessage accepts a full uidMap', async () => {
+  const c = { mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900], [6, 901]]) }) };
+  await expect(archiveMessage(c, { uid: [5, 6] })).resolves.toMatchObject({ action: 'archived' });
+});
+// Regression guard for the general trap: no writer may remove a system label equal to the selected mailbox.
+it('no organize writer STOREs -\\Inbox while INBOX is selected', async () => {
+  const c = mkClient();
+  await archiveMessage(c, { uid: 1, mailbox: 'INBOX' });
+  expect(c.calls).not.toContainEqual(expect.arrayContaining(['remove', 1, ['\\Inbox']]));
 });
 it('moveMessage moves a uid to a destination mailbox', async () => {
   const c = mkClient();
@@ -333,7 +352,7 @@ describe('batch UID array support', () => {
   it('archiveMessage passes comma-joined range and returns uid array', async () => {
     const c = mkBatchClient();
     const r = await archiveMessage(c, { uid: [5, 6] });
-    expect(c.calls).toContainEqual(['remove', '5,6', ['\\Inbox'], { uid: true, useLabels: true }]);
+    expect(c.calls).toContainEqual(['move', '5,6', ALL_MAIL, { uid: true }]);
     expect(r).toEqual({ uid: [5, 6], mailbox: 'INBOX', action: 'archived' });
   });
 

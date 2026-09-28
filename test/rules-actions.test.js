@@ -48,10 +48,10 @@ describe('runAction dispatches to the right writer op', () => {
     await runAction(c, parseAction('label:Promo'), { uid: 7, mailbox: 'INBOX' }, {});
     expect(c.calls).toContainEqual(['add', 7, ['Promo'], { uid: true, useLabels: true }]);
   });
-  it('archive → removeLabel \\Inbox', async () => {
+  it('archive → MOVE to All Mail', async () => {
     const c = mkClient();
     await runAction(c, parseAction('archive'), { uid: 7, mailbox: 'INBOX' }, {});
-    expect(c.calls).toContainEqual(['remove', 7, ['\\Inbox'], { uid: true, useLabels: true }]);
+    expect(c.calls).toContainEqual(['move', 7, '[Gmail]/All Mail', { uid: true }]);
   });
   it('star → add \\Starred; important → add \\Important', async () => {
     const c = mkClient();

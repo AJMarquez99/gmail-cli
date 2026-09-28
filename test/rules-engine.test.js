@@ -25,7 +25,7 @@ describe('applyRules', () => {
     expect(rep.rules[0].applied).toHaveLength(4); // 2 uids × 2 actions
     // Batched form: one call per action covering all UIDs
     expect(c.calls).toContainEqual(['add', '5,6', ['Promo'], { uid: true, useLabels: true }]);
-    expect(c.calls).toContainEqual(['remove', '5,6', ['\\Inbox'], { uid: true, useLabels: true }]);
+    expect(c.calls).toContainEqual(['move', '5,6', '[Gmail]/All Mail', { uid: true }]);
   });
 
   it('batches each action over the full matched uid set in one IMAP command', async () => {
@@ -36,10 +36,10 @@ describe('applyRules', () => {
     expect(rep.rules[0].applied).toHaveLength(6); // 3 uids × 2 actions
 
     // EXACTLY two mutation commands: one label:Promo, one archive
-    const mutations = c.calls.filter((x) => x[0] === 'add' || x[0] === 'remove');
+    const mutations = c.calls.filter((x) => x[0] === 'add' || x[0] === 'remove' || x[0] === 'move');
     expect(mutations).toHaveLength(2);
     expect(mutations).toContainEqual(['add', '5,6,7', ['Promo'], { uid: true, useLabels: true }]);
-    expect(mutations).toContainEqual(['remove', '5,6,7', ['\\Inbox'], { uid: true, useLabels: true }]);
+    expect(mutations).toContainEqual(['move', '5,6,7', '[Gmail]/All Mail', { uid: true }]);
 
     // Report has per-uid entries for each action (order-insensitive)
     expect(rep.rules[0].applied).toEqual(expect.arrayContaining([
@@ -60,7 +60,8 @@ describe('applyRules', () => {
     const rep = await applyRules(c, rules, { profileCan }, {});
     expect(rep.rules[0].skipped).toEqual([{ action: 'trash', reason: 'capability:delete' }]);
     expect(rep.rules[0].applied).toEqual([{ uid: 5, action: 'archive' }]);
-    expect(c.calls.some((x) => x[0] === 'move')).toBe(false); // trash never executed
+    // trash never executed: no move to Trash (archive's own move to All Mail is expected)
+    expect(c.calls.some((x) => x[0] === 'move' && x[2] === '[Gmail]/Trash')).toBe(false);
   });
 
   it('dry-run mutates nothing but reports would-apply', async () => {
@@ -115,6 +116,7 @@ describe('applyRules', () => {
       search: async (q, o) => { calls.push(['search', q, o]); return [5, 6]; },
       messageFlagsAdd: async (u, f, o) => { calls.push(['add', u, f, o]); throw new Error('IMAP failure'); },
       messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
+      messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
     };
     const rules = [{ id: 'r1', match: 'from:x', actions: ['label:Promo', 'archive'], mailbox: 'INBOX' }];
     const rep = await applyRules(errClient, rules, { profileCan: allow }, {});
