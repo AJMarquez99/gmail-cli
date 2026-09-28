@@ -27,7 +27,9 @@ Throw the right error class from `src/lib/errors.js` so the exit code is correct
 |---|---|---|
 | bad flag / arg / input | `InvalidInputError` (or `MissingCredentialsError`) | `2` |
 | unparseable config/allowlist/credentials **file** | `MalformedConfigError` | `2` |
-| recipient not on the allowlist | `RecipientNotAllowedError` | `3` |
+| recipient cap (`maxRecipients`) exceeded | `TooManyRecipientsError` | `2` |
+| recipient not on the allowlist, or a locked boundary refusing a bypass/edit | `RecipientNotAllowedError`, `BoundaryLockedError` | `3` |
+| profile lacks the capability bucket the command requires | `CapabilityDeniedError` | `4` |
 | network / SMTP / unexpected | `GmailError` or any plain `Error` | `1` |
 | success | return data normally | `0` |
 

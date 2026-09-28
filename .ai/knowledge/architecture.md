@@ -128,9 +128,10 @@ including the `GMAIL_*` env vars — this backward-compat guarantee is load-bear
 | Code | Meaning | Class |
 |---|---|---|
 | `0` | success | — |
-| `1` | generic / SMTP / network failure | `GmailError` (default) |
-| `2` | user-fixable config / bad input | `InvalidInputError`, `MissingCredentialsError`, `MalformedConfigError` |
-| `3` | recipient blocked by the allowlist | `RecipientNotAllowedError` |
+| `1` | generic / SMTP / network failure | `GmailError` (default), `ImapTimeoutError` |
+| `2` | user-fixable config / bad input | `InvalidInputError`, `MissingCredentialsError`, `MalformedConfigError`, `TooManyRecipientsError` |
+| `3` | blocked by the boundary — recipient not on the allowlist, or a sealed/locked boundary refusing a bypass/edit | `RecipientNotAllowedError`, `BoundaryLockedError` |
+| `4` | capability denied — command's bucket not granted to the profile (a deliberate, documented extension past the shared `0-3` family) | `CapabilityDeniedError` |
 
 `handle()` maps any non-`GmailError` throw to exit `1`. Throw the specific subclass so the exit code
 is correct — see [[conventions]]. **Unparseable config files** (`config.json`, `allowlist.json`,

@@ -703,7 +703,9 @@ server-side equivalent and is omitted from the export.
 | `gmail rules apply` | Apply rules over IMAP (`--dry-run`, `--rule <id>`, `--limit <n>`). Gated: `organize` + per-action checks. |
 | `gmail rules export-xml` | Emit importable Gmail filter XML to stdout. Always allowed. |
 
-Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` recipient blocked by allowlist · `4` capability denied (command's bucket not granted to the profile).
+Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` blocked by the boundary (recipient not in the allowlist, or a sealed/locked boundary refusing a bypass/edit) · `4` capability denied (command's bucket not granted to the profile).
+
+> **Note on exit `4`:** the shared CLI-family contract defines `0/1/2/3`. `gmail-cli` adds `4` for capability-denied as a deliberate, documented extension so an orchestrator can distinguish "this profile may not do that" from "that recipient is blocked" (`3`). Consumers coded to the 4-code family should treat `4` like a `2`-class refusal.
 
 `--dry-run` always exits `0` for allowlist denials (reported in the output, not the exit code) —
 except exceeding the recipient cap (`config.maxRecipients`), which exits `2`, and a
