@@ -21,7 +21,7 @@ function load(deps, profileAllowlistPath) {
 
 function save(deps, path, data) {
   deps.ensureDir(dirname(path));
-  writeJson(path, data, { writeFile: deps.writeFile });
+  writeJson(path, data, { writeFile: deps.writeFile, mode: 0o600 });
 }
 
 export async function runAllowAdd(opts, deps) {

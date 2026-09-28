@@ -33,7 +33,7 @@ export async function runInit(_opts, deps) {
       created.push(path);
     }
     // Safety net: writeFileIfAbsent only writes if the file is absent.
-    deps.writeFileIfAbsent(path, template);
+    deps.writeFileIfAbsent(path, template, 0o600);
   }
 
   // Credential check — never prompt or write secrets, just report status.

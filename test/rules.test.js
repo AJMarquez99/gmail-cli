@@ -21,6 +21,7 @@ describe('rules add', () => {
     expect(r).toMatchObject({ action: 'added', id: 'from-acme-com' });
     expect(r.rule).toEqual({ id: 'from-acme-com', match: 'from:acme.com', actions: ['label:Outreach/Acme', 'archive'], mailbox: 'INBOX' });
     expect(deps.written().rules).toHaveLength(1);
+    expect(deps.writeFile.mock.calls[0][2]).toBe(0o600);
   });
   it('honors --id, --mark read, --star, --important, --move, --trash', async () => {
     const deps = mkDeps();
@@ -52,6 +53,7 @@ describe('rules list / remove / export-xml', () => {
     const deps = mkDeps([{ id: 'a', match: 'from:x', actions: ['archive'], mailbox: 'INBOX' }]);
     expect(await runRulesRemove({ id: 'a' }, deps)).toEqual({ id: 'a', action: 'removed' });
     expect(deps.written().rules).toEqual([]);
+    expect(deps.writeFile.mock.calls[0][2]).toBe(0o600);
   });
   it('remove of an unknown id throws', async () => {
     await expect(runRulesRemove({ id: 'nope' }, mkDeps())).rejects.toThrow(/no rule/i);

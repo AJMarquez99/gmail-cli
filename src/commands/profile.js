@@ -29,7 +29,7 @@ export async function runProfileAdd(opts, deps) {
   }
 
   deps.ensureDir(dirname(path));
-  writeJson(path, config, { writeFile: deps.writeFile });
+  writeJson(path, config, { writeFile: deps.writeFile, mode: 0o600 });
 
   return { name, default: isDefault, action: 'created' };
 }
@@ -67,7 +67,7 @@ export async function runProfileUse(opts, deps) {
   }
 
   config.defaultProfile = name;
-  writeJson(path, config, { writeFile: deps.writeFile });
+  writeJson(path, config, { writeFile: deps.writeFile, mode: 0o600 });
 
   return { defaultProfile: name, action: 'default-set' };
 }
@@ -102,7 +102,7 @@ export async function runProfileRemove(opts, deps) {
     }
   }
 
-  writeJson(path, config, { writeFile: deps.writeFile });
+  writeJson(path, config, { writeFile: deps.writeFile, mode: 0o600 });
 
   return {
     name,
@@ -149,7 +149,7 @@ export async function runProfileCaps(opts, deps) {
   else { entry.deny = deny; }
 
   deps.ensureDir(dirname(path));
-  writeJson(path, config, { writeFile: deps.writeFile });
+  writeJson(path, config, { writeFile: deps.writeFile, mode: 0o600 });
   const caps = resolveCapabilities(entry);
   return { name, mode: caps.mode, capabilities: [...caps.allowed], action: 'caps-set' };
 }

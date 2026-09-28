@@ -29,6 +29,7 @@ describe('runConfigSet', () => {
     expect(w).toEqual({ _comment: 'keep', replyTo: 'old@x.com', fromName: 'Your Name' });
     expect(out.unknownKey).toBeFalsy();
     expect(d.ensureDir).toHaveBeenCalled();
+    expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
   });
   it('coerces booleans and sets nested keys', async () => {
     const d = deps();
@@ -64,6 +65,7 @@ describe('runConfigUnset', () => {
     const d = deps({ file: JSON.stringify({ fromName: 'X', replyTo: 'y@x.com' }) });
     await runConfigUnset({ key: 'fromName' }, d);
     expect(written(d)).toEqual({ replyTo: 'y@x.com' });
+    expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
   });
 });
 

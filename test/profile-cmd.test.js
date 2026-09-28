@@ -35,6 +35,7 @@ describe('runProfileAdd', () => {
     expect(w.defaultProfile).toBe('work');
     expect(out).toEqual({ name: 'work', default: true, action: 'created' });
     expect(d.ensureDir).toHaveBeenCalled();
+    expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
   });
 
   it('adds a second profile without changing the existing defaultProfile', async () => {
@@ -97,6 +98,7 @@ describe('runProfileUse', () => {
     const w = written(d);
     expect(w.defaultProfile).toBe('home');
     expect(out).toEqual({ defaultProfile: 'home', action: 'default-set' });
+    expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
   });
 
   it('throws InvalidInputError for an unknown profile', async () => {
@@ -128,6 +130,7 @@ describe('runProfileRemove', () => {
     expect(out.filesKept.some((p) => p.includes('home'))).toBe(true);
     // No file deletion dep was called (no deleteFile/unlink in deps)
     expect(out.newDefault).toBe('work');
+    expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
   });
 
   it('removes the default profile when exactly one other remains — repoints to it', async () => {

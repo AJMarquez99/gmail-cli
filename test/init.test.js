@@ -35,10 +35,12 @@ describe('runInit', () => {
     expect(deps.writeFileIfAbsent).toHaveBeenCalledWith(
       '/h/.config/gmail-cli/allowlist.json',
       ALLOWLIST_TEMPLATE,
+      0o600,
     );
     expect(deps.writeFileIfAbsent).toHaveBeenCalledWith(
       '/h/.config/gmail-cli/config.json',
       CONFIG_TEMPLATE,
+      0o600,
     );
   });
 

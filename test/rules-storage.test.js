@@ -22,11 +22,12 @@ describe('rules storage', () => {
     expect(loadRules({ path: '/x', readFile })).toEqual([]);
   });
 
-  it('saveRules: writes a { rules } container as pretty JSON', () => {
+  it('saveRules: writes a { rules } container as pretty JSON at mode 0600', () => {
     const writeFile = vi.fn();
     saveRules('/x', [{ id: 'a', match: 'from:x', actions: ['archive'], mailbox: 'INBOX' }], { writeFile });
-    const [path, data] = writeFile.mock.calls[0];
+    const [path, data, mode] = writeFile.mock.calls[0];
     expect(path).toBe('/x');
     expect(JSON.parse(data)).toEqual({ rules: [{ id: 'a', match: 'from:x', actions: ['archive'], mailbox: 'INBOX' }] });
+    expect(mode).toBe(0o600);
   });
 });

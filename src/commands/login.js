@@ -36,6 +36,8 @@ export async function runLogin(opts, deps) {
 
   deps.ensureDir(dirname(path));
   deps.writeFile(path, JSON.stringify({ user, appPassword }, null, 2) + '\n', 0o600);
+  // writeFile's mode only applies on create; re-tighten an existing (e.g. --force) file to 0600.
+  deps.chmod?.(path, 0o600);
 
   return { path, user, written: true };
 }

@@ -7,7 +7,7 @@ describe('sendlog', () => {
     const mkdir = vi.fn();
     appendSendLog({ ts: 'T', subject: 'S' }, { env: { HOME: '/h' }, append, mkdir });
     expect(mkdir).toHaveBeenCalledWith('/h/.config/gmail-cli', { recursive: true });
-    expect(append).toHaveBeenCalledWith('/h/.config/gmail-cli/sent.jsonl', '{"ts":"T","subject":"S"}\n');
+    expect(append).toHaveBeenCalledWith('/h/.config/gmail-cli/sent.jsonl', '{"ts":"T","subject":"S"}\n', { mode: 0o600 });
   });
 
   it('reads the last N entries newest-first', () => {
@@ -36,7 +36,7 @@ describe('sendlog', () => {
     const mkdir = vi.fn();
     appendSendLog({ a: 1 }, { env: { HOME: '/h' }, append, mkdir, path: '/custom/sent.jsonl' });
     expect(mkdir).toHaveBeenCalledWith('/custom', { recursive: true });
-    expect(append).toHaveBeenCalledWith('/custom/sent.jsonl', '{"a":1}\n');
+    expect(append).toHaveBeenCalledWith('/custom/sent.jsonl', '{"a":1}\n', { mode: 0o600 });
   });
 
   it('readSendLog uses the explicit path when provided', () => {

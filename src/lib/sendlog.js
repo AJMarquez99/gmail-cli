@@ -9,7 +9,7 @@ export function resolveSendLogPath(env = process.env) {
 export function appendSendLog(entry, { env = process.env, append = appendFileSync, mkdir = mkdirSync, path } = {}) {
   const resolvedPath = path || resolveSendLogPath(env);
   mkdir(dirname(resolvedPath), { recursive: true });
-  append(resolvedPath, JSON.stringify(entry) + '\n');
+  append(resolvedPath, JSON.stringify(entry) + '\n', { mode: 0o600 });
 }
 
 /** Read the last `limit` entries, newest-first. Missing file → []. */

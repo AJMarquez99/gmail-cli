@@ -1,5 +1,5 @@
 // test/profile-caps.test.js
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runProfileCaps } from '../src/commands/profile.js';
 
 function makeDeps(initial) {
@@ -7,7 +7,7 @@ function makeDeps(initial) {
   return {
     env: { HOME: '/h' },
     readFile: () => store.json,
-    writeFile: (_p, data) => { store.json = data; },
+    writeFile: vi.fn((_p, data) => { store.json = data; }),
     ensureDir: () => {},
     _store: store,
   };
@@ -20,6 +20,7 @@ describe('runProfileCaps', () => {
     expect(r.mode).toBe('allow');
     expect(r.capabilities.sort()).toEqual(['draft', 'organize', 'read']);
     expect(JSON.parse(deps._store.json).profiles.biz.capabilities).toEqual(['read', 'organize', 'draft']);
+    expect(deps.writeFile.mock.calls[0][2]).toBe(0o600);
   });
   it('sets a denylist and clears any prior allowlist', async () => {
     const deps = makeDeps({ profiles: { biz: { capabilities: ['read'] } } });

@@ -10,6 +10,7 @@ function deps({ exists = false, email = 'you@gmail.com', pw = 'abcd efgh ijkl mn
     fileExists: vi.fn(() => exists),
     ensureDir: vi.fn(),
     writeFile: vi.fn(),
+    chmod: vi.fn(),
     prompt: vi.fn(async () => email),
     promptHidden: vi.fn(async () => pw),
   };
@@ -27,6 +28,12 @@ describe('runLogin', () => {
     expect(mode).toBe(0o600);
     expect(d.ensureDir).toHaveBeenCalledWith('/h/.config/gmail-cli');
     expect(out).toEqual({ path: '/h/.config/gmail-cli/credentials.json', user: 'you@gmail.com', written: true });
+  });
+
+  it('re-tightens the file to 0600 via chmod after writing', async () => {
+    const d = deps();
+    await runLogin({}, d);
+    expect(d.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/credentials.json', 0o600);
   });
 
   it('uses --user instead of prompting for the email', async () => {
@@ -47,6 +54,12 @@ describe('runLogin', () => {
     const d = deps({ exists: true });
     await runLogin({ force: true }, d);
     expect(d.writeFile).toHaveBeenCalled();
+  });
+
+  it('re-tightens an existing (--force) file to 0600 via chmod', async () => {
+    const d = deps({ exists: true });
+    await runLogin({ force: true }, d);
+    expect(d.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/credentials.json', 0o600);
   });
 
   it('trims surrounding whitespace from the email', async () => {
