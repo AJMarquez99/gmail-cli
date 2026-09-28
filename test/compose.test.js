@@ -37,6 +37,24 @@ describe('buildMessage', () => {
       { ...ctx, profile: { ...ctx.profile, signature: { text: '-- Me', html: '<p>-- Me</p>' } } }, deps);
     expect(m.text).toContain('-- Me');
   });
+  it('rejects a CR/LF in fromName (header injection)', () => {
+    expect(() => buildMessage({ to: ['a@x.com'], cc: [], bcc: [] }, { subject: '', body: 'x', fromName: 'Me\r\nBcc: evil@x.com' }, ctx, deps))
+      .toThrow(/CR or LF/i);
+  });
+  it('rejects a CR/LF in replyTo (header injection)', () => {
+    expect(() => buildMessage({ to: ['a@x.com'], cc: [], bcc: [] }, { subject: '', body: 'x', replyTo: 'r@x.com\nBcc: evil@x.com' }, ctx, deps))
+      .toThrow(/CR or LF/i);
+  });
+  it('rejects a CR/LF in fromName sourced from profile config (not just the flag)', () => {
+    expect(() => buildMessage({ to: ['a@x.com'], cc: [], bcc: [] }, { subject: '', body: 'x' },
+      { ...ctx, profile: { ...ctx.profile, fromName: 'Me\r\nBcc: evil@x.com' } }, deps))
+      .toThrow(/CR or LF/i);
+  });
+  it('rejects a CR/LF in replyTo sourced from profile config (not just the flag)', () => {
+    expect(() => buildMessage({ to: ['a@x.com'], cc: [], bcc: [] }, { subject: '', body: 'x' },
+      { ...ctx, profile: { ...ctx.profile, replyTo: 'r@x.com\nBcc: evil@x.com' } }, deps))
+      .toThrow(/CR or LF/i);
+  });
 });
 
 it('buildRawMime produces parseable RFC822', async () => {

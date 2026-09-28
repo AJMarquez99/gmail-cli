@@ -79,6 +79,14 @@ export function buildAttachments(paths, deps, { root } = {}) {
   return out;
 }
 
+/** Reject CR/LF in a single-line header value (defends against header injection). Returns the value unchanged. */
+function assertNoCRLF(value, field) {
+  if (value == null) return value;
+  const s = String(value);
+  if (/[\r\n]/.test(s)) throw new InvalidInputError(`${field} must not contain CR or LF characters.`);
+  return s;
+}
+
 /**
  * Assemble a nodemailer message object from already-resolved recipients + opts.
  * Does NOT perform allowlist resolution — callers pass resolved to/cc/bcc.
@@ -104,8 +112,8 @@ export function buildMessage({ to, cc, bcc }, opts, { profile, creds }, deps) {
     if (html != null && sig.html) html = `${html}${sig.html}`;
   }
   const attachments = (opts.attach && opts.attach.length) ? buildAttachments(toList(opts.attach), deps, { root: profile.attachRoot }) : [];
-  const fromName = opts.fromName || profile.fromName;
-  const replyTo = opts.replyTo || profile.replyTo;
+  const fromName = assertNoCRLF(opts.fromName || profile.fromName, '--from-name');
+  const replyTo = assertNoCRLF(opts.replyTo || profile.replyTo, '--reply-to');
   const refs = toList(opts.references);
 
   const message = {
