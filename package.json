@@ -4,8 +4,8 @@
   "description": "Gmail CLI with a fail-closed recipient allowlist — send (markdown, attachments, dry-run, threading, send log) plus IMAP read, label, and mark.",
   "type": "module",
   "bin": {
-    "gmail": "./bin/gmail.js",
-    "gmail-mcp": "./bin/gmail-mcp.js"
+    "gmail": "bin/gmail.js",
+    "gmail-mcp": "bin/gmail-mcp.js"
   },
   "files": [
     "bin/",
@@ -21,7 +21,7 @@
   "author": "Alejandro Marquez",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AJMarquez99/gmail-cli.git"
+    "url": "git+https://github.com/AJMarquez99/gmail-cli.git"
   },
   "homepage": "https://github.com/AJMarquez99/gmail-cli#readme",
   "bugs": {
