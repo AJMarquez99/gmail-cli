@@ -24,3 +24,7 @@ rules-*.json
 
 # Local agent instructions (dot-ai convention block) — kept local, not committed.
 /CLAUDE.md
+
+# Local agent/tooling state
+.superpowers/
+.claude/settings.local.json
