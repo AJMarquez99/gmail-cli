@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readJson, writeJson, getPath, setPath, unsetPath, coerce } from '../src/lib/jsonfile.js';
 import { MalformedConfigError } from '../src/lib/errors.js';
 
@@ -38,6 +41,34 @@ describe('writeJson', () => {
     const writeFile = vi.fn();
     writeJson('/p.json', { a: 1 }, { writeFile });
     expect(writeFile).toHaveBeenCalledWith('/p.json', '{\n  "a": 1\n}\n', undefined);
+  });
+  it('re-tightens permissions via chmod when both mode and chmod are given', () => {
+    const writeFile = vi.fn();
+    const chmod = vi.fn();
+    writeJson('/p.json', { a: 1 }, { writeFile, mode: 0o600, chmod });
+    expect(chmod).toHaveBeenCalledWith('/p.json', 0o600);
+  });
+  it('does not call chmod when no mode is given', () => {
+    const writeFile = vi.fn();
+    const chmod = vi.fn();
+    writeJson('/p.json', { a: 1 }, { writeFile, chmod });
+    expect(chmod).not.toHaveBeenCalled();
+  });
+  it('swallows a chmod failure and warns instead of throwing (write already succeeded)', () => {
+    const writeFile = vi.fn();
+    const chmod = vi.fn(() => { throw new Error('EPERM'); });
+    const warn = vi.fn();
+    expect(() => writeJson('/p.json', { a: 1 }, { writeFile, mode: 0o600, chmod, warn })).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+  });
+  it('uses the default writeFile against a real file without throwing on a bare numeric mode', () => {
+    // Regression: fs.writeFileSync rejects a bare number as its 3rd (options) argument
+    // (ERR_INVALID_ARG_TYPE) — the default writeFile must wrap it as { mode }.
+    const dir = mkdtempSync(join(tmpdir(), 'gmail-cli-jsonfile-'));
+    const path = join(dir, 'f.json');
+    expect(() => writeJson(path, { a: 1 }, { mode: 0o600 })).not.toThrow();
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ a: 1 });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });
 

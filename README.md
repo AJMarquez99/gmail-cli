@@ -840,6 +840,13 @@ gmail log --limit 5 # show last 5
   `credentials.json`.
 - The App Password is a long-lived secret with SMTP-send access to the account. Keep
   `credentials.json` at `chmod 600` (`gmail login` does this automatically); never commit it.
+- Every file this CLI writes under `~/.config/gmail-cli/` — `config.json`, `allowlist*.json`,
+  `rules*.json`, and `sent*.jsonl` (not just `credentials.json`) — is written owner-only (`chmod
+  600`) and re-tightened to `600` on every subsequent write/append, since a file's mode only
+  applies at creation. An install upgrading from an older version whose files were left
+  world-readable self-heals the next time each file is touched (`config set`, `allow add`,
+  `profile add`, `rules add`, sending), or immediately via a no-op `gmail init` (safe to re-run;
+  it never overwrites existing content, only permissions).
 - Scope is send-only by construction (SMTP). Revoke anytime at
   <https://myaccount.google.com/apppasswords>.
 - Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast

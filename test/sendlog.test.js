@@ -45,4 +45,21 @@ describe('sendlog', () => {
     expect(readFile).toHaveBeenCalledWith('/custom/sent.jsonl', 'utf8');
     expect(out).toEqual([{ x: 1 }]);
   });
+
+  it('re-tightens the log to 0600 via chmod after appending (mode is create-only)', () => {
+    const append = vi.fn();
+    const mkdir = vi.fn();
+    const chmod = vi.fn();
+    appendSendLog({ ts: 'T' }, { env: { HOME: '/h' }, append, mkdir, chmod });
+    expect(chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/sent.jsonl', 0o600);
+  });
+
+  it('swallows a chmod failure and warns instead of throwing (append already succeeded)', () => {
+    const append = vi.fn();
+    const mkdir = vi.fn();
+    const chmod = vi.fn(() => { throw new Error('EPERM'); });
+    const warn = vi.fn();
+    expect(() => appendSendLog({ ts: 'T' }, { env: { HOME: '/h' }, append, mkdir, chmod, warn })).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+  });
 });

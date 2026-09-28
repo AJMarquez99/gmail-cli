@@ -26,7 +26,9 @@ export const defaultDeps = {
   realpath: (p) => realpathSync(p),
   cwd: () => process.cwd(),
   now: () => new Date().toISOString(),
-  appendLog: (entry, o) => appendSendLog(entry, o || {}),
+  // Threads the default chmod/warn through so an existing (pre-hardening) send log gets
+  // re-tightened on every append too; callers may still override either via `o`.
+  appendLog: (entry, o) => appendSendLog(entry, { chmod: defaultDeps.chmod, warn: defaultDeps.warn, ...(o || {}) }),
   readLog: (o) => readSendLog(o || {}),
   fileExists: (p) => existsSync(p),
   ensureDir: (d) => mkdirSync(d, { recursive: true }),
@@ -36,6 +38,7 @@ export const defaultDeps = {
   readFile: (p) => readFileSync(p, 'utf8'),
   writeFile: (p, data, mode) => writeFileSync(p, data, mode != null ? { mode } : undefined),
   chmod: (p, mode) => chmodSync(p, mode),
+  warn: (msg) => process.stderr.write(`warn: ${msg}\n`),
   prompt: (q) =>
     new Promise((resolve) => {
       const rl = createInterface({ input: process.stdin, output: process.stdout });

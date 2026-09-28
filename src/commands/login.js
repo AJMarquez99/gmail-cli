@@ -1,5 +1,6 @@
 import { dirname } from 'node:path';
 import { InvalidInputError, BoundaryLockedError } from '../lib/errors.js';
+import { tightenMode } from '../lib/permissions.js';
 
 /**
  * Guided credential setup. Prompts for the Gmail address and App Password
@@ -37,7 +38,8 @@ export async function runLogin(opts, deps) {
   deps.ensureDir(dirname(path));
   deps.writeFile(path, JSON.stringify({ user, appPassword }, null, 2) + '\n', 0o600);
   // writeFile's mode only applies on create; re-tighten an existing (e.g. --force) file to 0600.
-  deps.chmod?.(path, 0o600);
+  // A chmod failure here must not undo the write that already succeeded (see tightenMode).
+  tightenMode(path, 0o600, { chmod: deps.chmod, warn: deps.warn });
 
   return { path, user, written: true };
 }

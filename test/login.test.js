@@ -62,6 +62,15 @@ describe('runLogin', () => {
     expect(d.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/credentials.json', 0o600);
   });
 
+  it('does not fail the command if chmod fails after a successful write (non-fatal, warns)', async () => {
+    const d = deps();
+    d.chmod = vi.fn(() => { throw new Error('EPERM'); });
+    d.warn = vi.fn();
+    const out = await runLogin({}, d);
+    expect(out.written).toBe(true);
+    expect(d.warn).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+  });
+
   it('trims surrounding whitespace from the email', async () => {
     const d = deps();
     await runLogin({ user: '  agent@gmail.com  ' }, d);

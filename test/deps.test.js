@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,5 +30,29 @@ describe('defaultDeps.writeFileIfAbsent', () => {
     defaultDeps.writeFile(path, 'original', 0o644);
     defaultDeps.writeFileIfAbsent(path, 'new', 0o600);
     expect(readFileSync(path, 'utf8')).toBe('original');
+  });
+});
+
+describe('defaultDeps.warn', () => {
+  it('is a function that writes a warning to stderr', () => {
+    expect(typeof defaultDeps.warn).toBe('function');
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      defaultDeps.warn('something happened');
+      // mockRestore() (in the finally below) also clears call history, so assert before it runs.
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('something happened'));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('defaultDeps.appendLog', () => {
+  it('re-tightens the send log to 0600 via defaultDeps.chmod after appending', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gmail-cli-deps-'));
+    const path = join(dir, 'sent.jsonl');
+    defaultDeps.appendLog({ ts: 'T' }, { path });
+    expect(readFileSync(path, 'utf8')).toBe('{"ts":"T"}\n');
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });

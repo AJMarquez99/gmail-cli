@@ -30,4 +30,19 @@ describe('rules storage', () => {
     expect(JSON.parse(data)).toEqual({ rules: [{ id: 'a', match: 'from:x', actions: ['archive'], mailbox: 'INBOX' }] });
     expect(mode).toBe(0o600);
   });
+
+  it('saveRules: re-tightens to 0600 via chmod when a chmod dep is provided', () => {
+    const writeFile = vi.fn();
+    const chmod = vi.fn();
+    saveRules('/x', [], { writeFile, chmod });
+    expect(chmod).toHaveBeenCalledWith('/x', 0o600);
+  });
+
+  it('saveRules: swallows a chmod failure and warns instead of throwing', () => {
+    const writeFile = vi.fn();
+    const chmod = vi.fn(() => { throw new Error('EPERM'); });
+    const warn = vi.fn();
+    expect(() => saveRules('/x', [], { writeFile, chmod, warn })).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+  });
 });

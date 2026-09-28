@@ -17,6 +17,7 @@ function deps({ file, config: cfgForProfile = {} } = {}) {
     }),
     writeFile: vi.fn(),
     ensureDir: vi.fn(),
+    chmod: vi.fn(),
   };
 }
 const written = (d) => JSON.parse(d.writeFile.mock.calls[0][1]);
@@ -30,6 +31,7 @@ describe('runConfigSet', () => {
     expect(out.unknownKey).toBeFalsy();
     expect(d.ensureDir).toHaveBeenCalled();
     expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
+    expect(d.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/config.json', 0o600);
   });
   it('coerces booleans and sets nested keys', async () => {
     const d = deps();
@@ -93,6 +95,7 @@ describe('runConfigUnset', () => {
     await runConfigUnset({ key: 'fromName' }, d);
     expect(written(d)).toEqual({ replyTo: 'y@x.com' });
     expect(d.writeFile.mock.calls[0][2]).toBe(0o600);
+    expect(d.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/config.json', 0o600);
   });
 });
 

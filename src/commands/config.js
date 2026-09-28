@@ -105,7 +105,7 @@ export async function runConfigSet(opts, deps) {
   const next = setPath(config, kp, v);
   const unknownKey = !KNOWN_KEYS.has(bareKey(key)) || undefined;
   deps.ensureDir(dirname(path));
-  writeJson(path, next, { writeFile: deps.writeFile, mode: 0o600 });
+  writeJson(path, next, { writeFile: deps.writeFile, mode: 0o600, chmod: deps.chmod, warn: deps.warn });
   return { key, value: v, ...(unknownKey ? { unknownKey: true } : {}), config: next };
 }
 
@@ -136,6 +136,6 @@ export async function runConfigUnset(opts, deps) {
   const kp = keyPath(profile, key, config);
   const next = unsetPath(config, kp);
   deps.ensureDir(dirname(path));
-  writeJson(path, next, { writeFile: deps.writeFile, mode: 0o600 });
+  writeJson(path, next, { writeFile: deps.writeFile, mode: 0o600, chmod: deps.chmod, warn: deps.warn });
   return { key, action: 'unset', config: next };
 }
