@@ -19,30 +19,38 @@ export function createImapClient(creds, imapOpts = {}) {
 
 const TIMEOUT = Symbol('timeout');
 
+// imapflow's own connectionTimeout/greetingTimeout fire well before our race deadline and reject
+// connect() with one of these codes (imap-flow.js ~1815-1851) — treat them as a timeout too, not
+// as a fatal connect error, so the retry path is actually reachable in production.
+const IMAP_TIMEOUT_CODES = new Set(['CONNECT_TIMEOUT', 'GREETING_TIMEOUT']);
+
 /** Create + connect an IMAP client with a hard deadline; one fresh-client retry on timeout. */
 export async function openImapClient(deps, creds, imapOpts = {}, {
   timeoutMs = deps.imapConnectTimeoutMs ?? 30000,
   retries = 1,
-  warn = (m) => process.stderr.write(m),
+  warn = deps.warn ?? ((m) => process.stderr.write(m)),
 } = {}) {
   for (let attempt = 0; ; attempt++) {
     const client = deps.createImapClient(creds, imapOpts);
     let timer;
     const deadline = new Promise((resolve) => { timer = setTimeout(() => resolve(TIMEOUT), timeoutMs); });
-    // Race the connect attempt against the deadline. If the deadline wins, this attempt is
-    // abandoned but its connect() promise may still reject later (e.g. once we call close()) —
-    // attach a no-op catch now so that late rejection can never surface as an unhandledRejection.
+    // Belt-and-braces: keep an abandoned attempt from ever surfacing as unhandled, independent of
+    // how it's awaited.
     const connecting = client.connect();
     connecting.catch(() => {});
-    let result;
+    let timedOut = false;
     try {
-      result = await Promise.race([connecting, deadline]);
+      const result = await Promise.race([connecting, deadline]);
+      timedOut = result === TIMEOUT;
+    } catch (err) {
+      if (!IMAP_TIMEOUT_CODES.has(err.code)) throw err;
+      timedOut = true;
     } finally {
       clearTimeout(timer);
     }
-    if (result !== TIMEOUT) return client;
+    if (!timedOut) return client;
     try { client.close?.(); } catch { /* already dead */ }
-    if (attempt >= retries) throw new ImapTimeoutError(timeoutMs);
+    if (attempt >= retries) throw new ImapTimeoutError(timeoutMs, retries + 1);
     warn(`warn: IMAP connect timed out after ${timeoutMs}ms; retrying (${attempt + 1}/${retries})\n`);
   }
 }

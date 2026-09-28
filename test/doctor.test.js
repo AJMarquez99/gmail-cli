@@ -290,6 +290,7 @@ describe('runDoctor', () => {
   it('reports a timeout message (not a hang) when IMAP connect never resolves', async () => {
     const transporter = { verify: vi.fn(async () => true) };
     const hungClient = { connect: () => new Promise(() => {}), close: vi.fn() };
+    const warn = vi.fn();
     const deps = {
       ...makeDoctorDeps({
         resolveCredentialsFn: vi.fn(() => ({ user: 'a@gmail.com', appPassword: 'pw', source: 'env' })),
@@ -298,10 +299,12 @@ describe('runDoctor', () => {
         imapClient: hungClient,
       }),
       imapConnectTimeoutMs: 20,
+      warn, // inject so the retry warning doesn't hit real stderr during the test run
     };
     const out = await runDoctor({}, deps);
     expect(out.imap).toMatch(/timed out/);
     expect(out.ok).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/timed out.*retrying/));
   });
 
   it('surfaces mode and capabilities from the resolved profile', async () => {

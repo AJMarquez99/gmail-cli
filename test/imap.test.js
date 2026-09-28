@@ -44,6 +44,46 @@ describe('openImapClient', () => {
     expect(IMAP_DEFAULTS.socketTimeout).toBeLessThanOrEqual(120000);
   });
 
+  it('falls back to deps.warn when no explicit warn option is given', async () => {
+    const first = hung(), second = ok();
+    const deps = {
+      createImapClient: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second),
+      warn: vi.fn(),
+    };
+    await expect(openImapClient(deps, {}, {}, { timeoutMs: 20 })).resolves.toBe(second);
+    expect(deps.warn).toHaveBeenCalledWith(expect.stringMatching(/timed out.*retrying/));
+  });
+
+  // ---------------------------------------------------------------------
+  // Controller ruling: imapflow's own connectionTimeout/greetingTimeout fire
+  // long before our race deadline and reject connect() with a code — those
+  // must take the same branch as a race timeout (close, retry, then throw).
+  // ---------------------------------------------------------------------
+  describe.each(['CONNECT_TIMEOUT', 'GREETING_TIMEOUT'])('imapflow %s rejection', (code) => {
+    const timedOutRejecting = () => ({
+      connect: vi.fn(async () => { throw Object.assign(new Error('x'), { code }); }),
+      close: vi.fn(),
+    });
+
+    it('retries once on a fresh client and succeeds', async () => {
+      const first = timedOutRejecting(), second = ok();
+      const deps = { createImapClient: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second) };
+      const w = vi.fn();
+      await expect(openImapClient(deps, {}, {}, { ...opts, warn: w })).resolves.toBe(second);
+      expect(first.close).toHaveBeenCalled();
+      expect(w).toHaveBeenCalledWith(expect.stringMatching(/timed out.*retrying/));
+    });
+
+    it('throws ImapTimeoutError after the retry also fails the same way', async () => {
+      const deps = { createImapClient: vi.fn(() => timedOutRejecting()) };
+      const err = await openImapClient(deps, {}, {}, opts).catch((e) => e);
+      expect(err).toBeInstanceOf(ImapTimeoutError);
+      expect(err.exitCode).toBe(1);
+      expect(err.message).toMatch(/2 attempts/);
+      expect(deps.createImapClient).toHaveBeenCalledTimes(2);
+    });
+  });
+
   // ---------------------------------------------------------------------
   // Controller ruling: an abandoned connect() that rejects AFTER the
   // deadline already fired must never surface as an unhandledRejection.

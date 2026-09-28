@@ -57,8 +57,11 @@ export class RecipientNotAllowedError extends GmailError {
 }
 
 export class ImapTimeoutError extends GmailError {
-  constructor(ms) {
-    super(`IMAP connection to Gmail timed out after ${ms}ms (tried twice). Check your network and retry.`);
+  constructor(ms, attempts) {
+    super(
+      `IMAP connection to Gmail timed out after ${ms}ms (${attempts} attempt${attempts === 1 ? '' : 's'}). ` +
+        `Check your network and retry.`,
+    );
   }
 }
 
