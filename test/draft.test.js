@@ -24,7 +24,7 @@ function makeDeps({ appendResult = { uid: 99 } } = {}) {
     },
 
     async append(mbox, buf, flags) {
-      appendCalls.push({ mbox, flags });
+      appendCalls.push({ mbox, flags, raw: buf.toString() });
       return appendResult;
     },
   };
@@ -38,11 +38,14 @@ function makeDeps({ appendResult = { uid: 99 } } = {}) {
       fromName: null,
       replyTo: null,
       signature: null,
+      allowlistPath: '/allowlist.json',
+      allowlistEnforce: true,
       capabilities: resolveCapabilities({}),
     })),
     resolveCredentials: vi.fn(() => ({ user: 'me@example.com', appPassword: 'pw' })),
     createImapClient: vi.fn(() => client),
     statFile: vi.fn(() => ({ isFile: () => true, size: 10 })),
+    loadAllowlist: vi.fn(() => ({ recipients: [{ email: 'alice@example.com', aliases: ['alice'] }] })),
     _client: client,
   };
 }
@@ -115,6 +118,36 @@ describe('runDraftCreate', () => {
       deps,
     );
     expect(deps.resolveAllowlist).not.toHaveBeenCalled();
+  });
+});
+
+describe('runDraftCreate — alias expansion', () => {
+  it('expands a --to alias into the stored To header and the echoed result', async () => {
+    const d = makeDeps();
+    const out = await runDraftCreate({ to: ['alice'], subject: 's', body: 'b' }, d);
+    expect(out.to).toEqual(['alice@example.com']);
+    expect(d._client._appendCalls[0].raw).toMatch(/^To: alice@example\.com/m);
+  });
+
+  it('keeps literal emails (including unlisted ones — drafts never enforce)', async () => {
+    const d = makeDeps();
+    const out = await runDraftCreate({ to: ['bob@elsewhere.com'], subject: 's', body: 'b' }, d);
+    expect(out.to).toEqual(['bob@elsewhere.com']);
+  });
+
+  it('expands aliases in --cc and --bcc, mixed with literals', async () => {
+    const d = makeDeps();
+    const out = await runDraftCreate({ to: ['x@y.com'], cc: ['alice'], bcc: ['alice'], subject: 's', body: 'b' }, d);
+    expect(out.cc).toEqual(['alice@example.com']);
+    expect(out.bcc).toEqual(['alice@example.com']);
+  });
+
+  it('rejects an unknown alias with exit 2 instead of saving a recipient-less draft', async () => {
+    const d = makeDeps();
+    const err = await runDraftCreate({ to: ['alcie'], subject: 's', body: 'b' }, d).catch((e) => e);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/alcie/);
+    expect(d._client._appendCalls).toHaveLength(0);
   });
 });
 

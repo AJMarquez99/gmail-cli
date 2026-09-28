@@ -1,5 +1,5 @@
 import { makeAllowChecker } from './allowlist.js';
-import { RecipientNotAllowedError } from './lib/errors.js';
+import { RecipientNotAllowedError, InvalidInputError } from './lib/errors.js';
 
 const ENFORCE_OFF_WARNING =
   'warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).\n';
@@ -20,6 +20,14 @@ export function resolveRecipients({ to = [], cc = [], bcc = [] }, opts, { profil
       return r.denied;
     });
   return { enforce, denied, to: allow(to), cc: allow(cc), bcc: allow(bcc) };
+}
+
+/** Expand allowlist aliases WITHOUT enforcing (drafts never transmit). Rejects tokens that are still not addresses. */
+export function expandRecipients(lists, { profile, creds }, deps) {
+  const { to, cc, bcc } = resolveRecipients(lists, { noAllowlist: true }, { profile, creds }, deps);
+  const bad = [...to, ...cc, ...bcc].filter((t) => !String(t).includes('@'));
+  if (bad.length) throw new InvalidInputError(`Unknown alias or invalid address: ${bad.map((t) => `"${t}"`).join(', ')}`);
+  return { to, cc, bcc };
 }
 
 /** Gate before transmitting: throw on denial when enforcing; warn when enforcement is off. */

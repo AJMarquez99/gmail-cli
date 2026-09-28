@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveRecipients, enforceAllowlist, logSend } from '../src/transmit.js';
-import { RecipientNotAllowedError } from '../src/lib/errors.js';
+import { resolveRecipients, enforceAllowlist, logSend, expandRecipients } from '../src/transmit.js';
+import { RecipientNotAllowedError, InvalidInputError } from '../src/lib/errors.js';
 
 // Real shape: loadAllowlist returns { recipients: [...] }, matching makeAllowChecker's contract.
 const deps = {
@@ -21,6 +21,34 @@ describe('resolveRecipients', () => {
     expect(r.enforce).toBe(false);
     expect(r.to).toEqual(['no@x.com']);
     expect(r.denied).toEqual([]);
+  });
+});
+
+describe('expandRecipients', () => {
+  const aliasDeps = {
+    loadAllowlist: () => ({ recipients: [{ email: 'alice@example.com', aliases: ['alice'] }] }),
+  };
+
+  it('expands an alias to its canonical email', () => {
+    const r = expandRecipients({ to: ['alice'], cc: [], bcc: [] }, ctx, aliasDeps);
+    expect(r.to).toEqual(['alice@example.com']);
+  });
+
+  it('never enforces: keeps an unlisted literal email even when profile.allowlistEnforce is true', () => {
+    const r = expandRecipients({ to: ['no@x.com'], cc: [], bcc: [] }, ctx, aliasDeps);
+    expect(ctx.profile.allowlistEnforce).toBe(true);
+    expect(r.to).toEqual(['no@x.com']);
+  });
+
+  it('throws InvalidInputError (exit 2) for a token that is neither an alias nor an address', () => {
+    expect(() => expandRecipients({ to: ['alcie'], cc: [], bcc: [] }, ctx, aliasDeps))
+      .toThrow(InvalidInputError);
+    try {
+      expandRecipients({ to: ['alcie'], cc: [], bcc: [] }, ctx, aliasDeps);
+    } catch (err) {
+      expect(err.exitCode).toBe(2);
+      expect(err.message).toMatch(/alcie/);
+    }
   });
 });
 
