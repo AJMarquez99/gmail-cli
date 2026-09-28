@@ -11,6 +11,7 @@ function makeDeps({ exists = false, credsOk = false } = {}) {
     fileExists: vi.fn(existsFor),
     ensureDir: vi.fn(),
     writeFileIfAbsent: vi.fn(),
+    chmod: vi.fn(),
     resolveCredentials: vi.fn(() => {
       if (credsOk) return { user: 'you@gmail.com' };
       throw new MissingCredentialsError('/h/.config/gmail-cli/credentials.json');
@@ -35,11 +36,17 @@ describe('runInit', () => {
     expect(deps.writeFileIfAbsent).toHaveBeenCalledWith(
       '/h/.config/gmail-cli/allowlist.json',
       ALLOWLIST_TEMPLATE,
+      0o600,
     );
     expect(deps.writeFileIfAbsent).toHaveBeenCalledWith(
       '/h/.config/gmail-cli/config.json',
       CONFIG_TEMPLATE,
+      0o600,
     );
+
+    // Newly-created files are also chmod'd (belt-and-suspenders with the create-mode above).
+    expect(deps.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/allowlist.json', 0o600);
+    expect(deps.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/config.json', 0o600);
   });
 
   it('is non-clobbering / idempotent when files already exist', async () => {
@@ -49,6 +56,24 @@ describe('runInit', () => {
     expect(result.created).toHaveLength(0);
     expect(result.skipped).toContain('/h/.config/gmail-cli/allowlist.json');
     expect(result.skipped).toContain('/h/.config/gmail-cli/config.json');
+  });
+
+  it('re-tightens permissions on already-existing files too (upgrade self-heal via re-run)', async () => {
+    const deps = makeDeps({ exists: true, credsOk: true });
+    await runInit({}, deps);
+
+    // `init` is safe/idempotent to re-run; a pre-hardening install's 0644 files get chmod'd to
+    // 0600 even though their content is left untouched (writeFileIfAbsent skips the write).
+    expect(deps.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/allowlist.json', 0o600);
+    expect(deps.chmod).toHaveBeenCalledWith('/h/.config/gmail-cli/config.json', 0o600);
+  });
+
+  it('swallows a chmod failure and warns instead of throwing', async () => {
+    const deps = makeDeps({ exists: true, credsOk: true });
+    deps.chmod = vi.fn(() => { throw new Error('EPERM'); });
+    deps.warn = vi.fn();
+    await expect(runInit({}, deps)).resolves.toBeTruthy();
+    expect(deps.warn).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
   });
 
   it('scaffolds only the missing file when one already exists', async () => {

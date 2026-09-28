@@ -1,4 +1,4 @@
-import { InvalidInputError } from './lib/errors.js';
+import { InvalidInputError, CapabilityDeniedError } from './lib/errors.js';
 
 export const BUCKETS = ['read', 'organize', 'draft', 'send', 'delete'];
 
@@ -109,4 +109,19 @@ export function requiredCapability(commandPath, opts = {}) {
   const cap = COMMAND_CAPABILITY[commandPath];
   if (cap == null) return null;
   return typeof cap === 'function' ? cap(opts) : cap;
+}
+
+/**
+ * Enforce that the resolved profile is permitted to run the given command path.
+ * No-op when the command is always-allowed/unmapped. Throws CapabilityDeniedError (exit 4)
+ * when the profile lacks the required bucket. Shared by the CLI (handle()) and the MCP server
+ * so both honor the same per-profile capability scope.
+ */
+export function enforceCapability(commandPath, opts, deps) {
+  const cap = requiredCapability(commandPath, opts);
+  if (!cap) return;
+  const profile = deps.resolveProfile(opts.profile);
+  if (!profileCan(profile, cap)) {
+    throw new CapabilityDeniedError(cap, profile.name);
+  }
 }

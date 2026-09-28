@@ -46,7 +46,7 @@ export async function runRulesAdd(opts, deps) {
   const rule = { id, match: opts.match, actions, mailbox: opts.mailbox || 'INBOX' };
   rules.push(rule);
   deps.ensureDir(dirname(rulesPath));
-  saveRules(rulesPath, rules, { writeFile: deps.writeFile });
+  saveRules(rulesPath, rules, { writeFile: deps.writeFile, chmod: deps.chmod, warn: deps.warn });
   return { id, action: 'added', rule };
 }
 
@@ -63,7 +63,7 @@ export async function runRulesRemove(opts, deps) {
   const next = rules.filter((r) => r.id !== opts.id);
   if (next.length === rules.length) throw new InvalidInputError(`No rule with id "${opts.id}".`);
   deps.ensureDir(dirname(rulesPath));
-  saveRules(rulesPath, next, { writeFile: deps.writeFile });
+  saveRules(rulesPath, next, { writeFile: deps.writeFile, chmod: deps.chmod, warn: deps.warn });
   return { id: opts.id, action: 'removed' };
 }
 

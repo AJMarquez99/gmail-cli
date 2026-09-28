@@ -113,6 +113,67 @@ resolve profile → resolve creds → createImapClient → connect()
 same connect/teardown discipline. Read content is **never** written to the send log; HTML bodies are
 held in memory only.
 
+**`openImapClient(deps, creds, imapOpts)` (`src/imap.js`) is the single connect choke point** — every
+call site that opens an IMAP session (`withClient`, `doctor`, `draft send`) goes through it, not
+`createImapClient(...).connect()` directly. It races each `connect()` attempt against a 30s hard
+deadline (`deps.imapConnectTimeoutMs`, default 30000). Separately, imapflow's own client options come
+from `IMAP_DEFAULTS` (15s connect / 10s greeting / 120s socket, overridable per profile via
+`profile.imap`); an imapflow `CONNECT_TIMEOUT`/`GREETING_TIMEOUT` rejection is treated as a timeout too.
+On a timeout it retries once on a fresh client after closing the stalled one, and throws `ImapTimeoutError` on final
+failure. A stalled TLS handshake or greeting must never hang a command forever — if you add a new
+IMAP-opening command, route it through `openImapClient`, not a bare `client.connect()`.
+
+## Organize invariants
+
+`archiveMessage` (`src/writer.js`) archives by **`MOVE` to `[Gmail]/All Mail`**, never by removing the
+`\Inbox` label via `messageFlagsRemove`. Gmail omits the currently-selected mailbox's own label from
+`X-GM-LABELS`, so removing `\Inbox` while INBOX is selected is a silent, successful no-op — the bug
+this shipped with before the v1.0.0 hardening pass. The MOVE-based writers — `archiveMessage`,
+`moveMessage`, and `trashMessage` — **verify the server's response** through one shared helper
+(`moveVerified`): `false` → `GmailError` (exit 1); no/empty `uidMap` (nothing moved) →
+`InvalidInputError` (exit 2) naming the verb, uid and mailbox; a `uidMap` smaller than the
+de-duplicated requested UIDs → `GmailError` (partial move). So a rule with `archive` then `trash`
+records the trash as an error instead of reporting it applied. The same trap covers **every label
+removal from that label's own mailbox**: `removeLabel` with `label === mailbox`, and
+`starMessage`/`importantMessage` with `on: false` while `[Gmail]/Starred` / `[Gmail]/Important` is
+selected, all go through `dropLabel`, which does a `moveVerified` MOVE to All Mail (dropping exactly
+that label) instead of a `-X-GM-LABELS` STORE. The system-label→mailbox map (`SYSTEM_LABEL_MAILBOX`:
+`\Inbox`→`INBOX`, `\Starred`, `\Important`) sits beside `ALL_MAIL`/`TRASH`; any other label's mailbox
+is its own name, and the match is case-insensitive (`work` vs `Work`, `inbox` vs `INBOX`). So
+`label remove <uid> '\Inbox'` from INBOX is equivalent to `archive`. Because the message leaves the
+rule's mailbox, later actions in the same rule no longer see it (a later `archive`/`move`/`trash` lands in the rule's errors; a later `label`/`star`/`important`/`mark:read` STORE is unverified and reports applied),
+exactly as after `archive`/`move`/`trash`. Never STORE `-<label>`
+while `<label>`'s mailbox is selected (a regression test in `test/writer.test.js` guards this). Adding
+a label, and `\Seen` (a real IMAP flag), are unaffected. The flag/label writers (`addLabel`,
+`removeLabel`, `markMessage`, `starMessage`, `importantMessage`) do **not** yet verify a server
+result — imapflow's STORE gives no per-UID confirmation to check — so treat their success as
+"command accepted", not "state confirmed". A new MOVE-style writer must go through `moveVerified`.
+
+## Attachment confinement
+
+`buildAttachments` (`src/compose.js`) resolves every `--attach` path against a configured `attachRoot`
+(default: cwd) and refuses anything that resolves outside it — lexically or after resolving symlinks
+(`deps.realpath`) — including a symlink *inside* the root whose real target escapes it. An `attachRoot`
+that itself resolves to the filesystem root (lexically or via a symlink) is refused outright, since
+that would make the containment check vacuous. Attachment bytes are read in-process and handed to
+`nodemailer`/the standalone `MailComposer` as buffers — `disableFileAccess`/`disableUrlAccess` are
+forced on both, so a crafted message object can never make the composer itself read a file or fetch a
+URL by path/href.
+
+## Locked boundary mode
+
+`isBoundaryLocked` (`src/lock.js`) is a single global (top-level `config.locked`, never
+`profiles.<name>.locked`) switch checked before any CLI-reachable action that could widen the
+boundary: allowlist edits, boundary-related config keys (`BOUNDARY_KEYS` in `src/commands/config.js`:
+`allowlist.*`, `allowlistPath`, `credentialsPath`, `attachRoot`, `maxRecipients`, `capabilities`, `deny`,
+`profiles`, `locked` itself — matched on the bare subkey so a fully-qualified
+`profiles.<name>.<key>` can't sneak past it), `login`, profile add/remove/caps changes, and any send
+that tries to disable enforcement. It governs only changes made **through the CLI** — see SECURITY.md
+for the explicit limit (an agent that controls the process's environment variables or the config
+directory can defeat it). `defaultProfile` is deliberately **not** a boundary key: it stays a global
+(top-level-only) key, but switching among existing profiles is allowed while locked, same as
+`profile use` / `--profile`.
+
 ## Multi-account profiles
 
 `profile.js#resolveProfile` selects an account by a fixed ladder (flag → env → `config.defaultProfile`
@@ -128,9 +189,10 @@ including the `GMAIL_*` env vars — this backward-compat guarantee is load-bear
 | Code | Meaning | Class |
 |---|---|---|
 | `0` | success | — |
-| `1` | generic / SMTP / network failure | `GmailError` (default) |
-| `2` | user-fixable config / bad input | `InvalidInputError`, `MissingCredentialsError`, `MalformedConfigError` |
-| `3` | recipient blocked by the allowlist | `RecipientNotAllowedError` |
+| `1` | generic / SMTP / network failure | `GmailError` (default), `ImapTimeoutError` |
+| `2` | user-fixable config / bad input | `InvalidInputError`, `MissingCredentialsError`, `MalformedConfigError`, `TooManyRecipientsError` |
+| `3` | blocked by the boundary — recipient not on the allowlist, or a sealed/locked boundary refusing a bypass/edit | `RecipientNotAllowedError`, `BoundaryLockedError` |
+| `4` | capability denied — command's bucket not granted to the profile (a deliberate, documented extension past the shared `0-3` family) | `CapabilityDeniedError` |
 
 `handle()` maps any non-`GmailError` throw to exit `1`. Throw the specific subclass so the exit code
 is correct — see [[conventions]]. **Unparseable config files** (`config.json`, `allowlist.json`,

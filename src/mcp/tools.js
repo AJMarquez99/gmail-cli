@@ -7,7 +7,8 @@ import { runAllowList } from '../commands/allow.js';
 import { runLog } from '../commands/log.js';
 import { runDoctor } from '../commands/doctor.js';
 
-// Each tool: { name, description, inputSchema (zod raw shape), command (run* fn), mapArgs (args→opts) }.
+// Each tool: { name, capabilityPath (COMMAND_CAPABILITY key — the CLI's command→bucket map), description,
+// inputSchema (zod raw shape), command (run* fn), mapArgs (args→opts) }.
 //
 // SAFETY (see ../../.. /.ai/guidelines/safety-spec.md §5.8, MCP-2/MCP-3): this surface exposes the
 // OPERATIONAL verbs only. It deliberately excludes everything that could move the safety boundary or
@@ -19,6 +20,7 @@ const recipients = z.union([z.string(), z.array(z.string())]).optional();
 export const TOOLS = [
   {
     name: 'gmail_send',
+    capabilityPath: 'send',
     description:
       'Send an email. Gated by the fail-closed recipient allowlist — only allowlisted recipients (plus the account itself) are permitted, and a blocked recipient rejects the whole send (exit 3). Pass dry_run:true to preview without sending. The allowlist cannot be changed or bypassed from here.',
     inputSchema: {
@@ -62,6 +64,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_read_list',
+    capabilityPath: 'read list',
     description: 'List recent messages from a mailbox (default INBOX).',
     inputSchema: {
       mailbox: z.string().optional(),
@@ -74,6 +77,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_read_search',
+    capabilityPath: 'read search',
     description: 'Search messages with a Gmail query string (e.g. "from:x@y.com newer_than:7d").',
     inputSchema: {
       query: z.string(),
@@ -86,6 +90,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_read_show',
+    capabilityPath: 'read show',
     description: 'Show a single message by UID or Message-ID.',
     inputSchema: {
       target: z.string(),
@@ -97,6 +102,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_read_thread',
+    capabilityPath: 'read thread',
     description: 'Show all messages in a Gmail thread.',
     inputSchema: {
       thread_id: z.string(),
@@ -108,6 +114,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_label_list',
+    capabilityPath: 'label list',
     description: 'List all Gmail labels/mailboxes.',
     inputSchema: { profile: z.string().optional() },
     command: runLabelList,
@@ -115,6 +122,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_label_add',
+    capabilityPath: 'label add',
     description: 'Add a label to a message by UID.',
     inputSchema: {
       uid: z.string(),
@@ -127,6 +135,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_label_remove',
+    capabilityPath: 'label remove',
     description: 'Remove a label from a message by UID.',
     inputSchema: {
       uid: z.string(),
@@ -139,6 +148,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_mark',
+    capabilityPath: 'mark',
     description: 'Mark a message read or unread. Provide exactly one of read/unread.',
     inputSchema: {
       uid: z.string(),
@@ -152,6 +162,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_allow_list',
+    capabilityPath: 'allow list',
     description:
       'Show the recipient allowlist (read-only). Editing the allowlist is a human action on the JSON file and is not available here.',
     inputSchema: { profile: z.string().optional() },
@@ -160,6 +171,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_log',
+    capabilityPath: 'log',
     description: 'Show recent sent-mail log entries (metadata).',
     inputSchema: { limit: z.number().optional(), profile: z.string().optional() },
     command: runLog,
@@ -167,6 +179,7 @@ export const TOOLS = [
   },
   {
     name: 'gmail_doctor',
+    capabilityPath: 'doctor',
     description: 'Verify credentials over SMTP + IMAP; report the account, allowlist count, and enforcement.',
     inputSchema: { profile: z.string().optional() },
     command: runDoctor,

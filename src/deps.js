@@ -1,11 +1,12 @@
 import { createInterface } from 'node:readline';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { simpleParser } from 'mailparser';
 import { resolveCredentials } from './auth/credentials.js';
 import { createGmailTransport } from './transport.js';
 import { createImapClient } from './imap.js';
 import { loadAllowlist } from './allowlist.js';
 import { loadConfig } from './config.js';
+import { isBoundaryLocked } from './lock.js';
 import { appendSendLog, readSendLog } from './lib/sendlog.js';
 import { resolveProfile } from './profile.js';
 
@@ -19,17 +20,25 @@ export const defaultDeps = {
   parseMessage: (source) => simpleParser(source),
   loadAllowlist: (o) => loadAllowlist(o || {}),
   loadConfig: () => loadConfig({}),
+  isBoundaryLocked: () => isBoundaryLocked({ env: process.env, config: loadConfig({}) }),
   statFile: (p) => statSync(p),
+  readFileBytes: (p) => readFileSync(p),
+  realpath: (p) => realpathSync(p),
+  cwd: () => process.cwd(),
   now: () => new Date().toISOString(),
-  appendLog: (entry, o) => appendSendLog(entry, o || {}),
+  // Threads the default chmod/warn through so an existing (pre-hardening) send log gets
+  // re-tightened on every append too; callers may still override either via `o`.
+  appendLog: (entry, o) => appendSendLog(entry, { chmod: defaultDeps.chmod, warn: defaultDeps.warn, ...(o || {}) }),
   readLog: (o) => readSendLog(o || {}),
   fileExists: (p) => existsSync(p),
   ensureDir: (d) => mkdirSync(d, { recursive: true }),
-  writeFileIfAbsent: (p, c) => {
-    if (!existsSync(p)) writeFileSync(p, c);
+  writeFileIfAbsent: (p, c, mode) => {
+    if (!existsSync(p)) writeFileSync(p, c, mode != null ? { mode } : undefined);
   },
   readFile: (p) => readFileSync(p, 'utf8'),
   writeFile: (p, data, mode) => writeFileSync(p, data, mode != null ? { mode } : undefined),
+  chmod: (p, mode) => chmodSync(p, mode),
+  warn: (msg) => process.stderr.write(`warn: ${msg}\n`),
   prompt: (q) =>
     new Promise((resolve) => {
       const rl = createInterface({ input: process.stdin, output: process.stdout });

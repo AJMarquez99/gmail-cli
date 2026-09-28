@@ -3,10 +3,25 @@ import { resolveConfigPath } from './auth/credentials.js';
 import { resolveAllowlistPath } from './allowlist.js';
 import { resolveSendLogPath } from './lib/sendlog.js';
 import { resolveRulesPath } from './rules/storage.js';
-import { InvalidInputError } from './lib/errors.js';
+import { InvalidInputError, MalformedConfigError } from './lib/errors.js';
 import { resolveCapabilities } from './capabilities.js';
 
 const expand = (p, home) => (p && p.startsWith('~') ? join(home, p.slice(1)) : p);
+
+/**
+ * Resolve `maxRecipients` from a raw config value: absent → default 10; present must coerce
+ * (via Number()) to an integer >= 1 (a numeric string like "5" is fine) or resolution fails
+ * loudly with MalformedConfigError (exit 2) naming the key — a silently-disabled fan-out cap
+ * (e.g. NaN from a typo, which would make `total > NaN` never fire) is worse than a hard stop.
+ */
+function resolveMaxRecipients(raw, key) {
+  if (raw == null) return 10;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new MalformedConfigError(key, `"${key}" must be an integer >= 1 (got: ${JSON.stringify(raw)}).`);
+  }
+  return n;
+}
 
 export function resolveProfile({ env = process.env, config = {}, name } = {}) {
   const home = env.HOME || '';
@@ -25,7 +40,10 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
       signature: config.signature || null,
       allowlistEnforce: config.allowlist ? config.allowlist.enforce !== false : true,
       sendLog: config.sendLog || {},
+      attachRoot: expand(config.attachRoot, home) || null,
+      maxRecipients: resolveMaxRecipients(config.maxRecipients, 'maxRecipients'),
       capabilities: resolveCapabilities(config),
+      imap: config.imap || {},
       legacy: true,
     };
   }
@@ -53,7 +71,10 @@ export function resolveProfile({ env = process.env, config = {}, name } = {}) {
     signature: p.signature || null,
     allowlistEnforce: p.allowlist ? p.allowlist.enforce !== false : true,
     sendLog: p.sendLog || {},
+    attachRoot: expand(p.attachRoot, home) || null,
+    maxRecipients: resolveMaxRecipients(p.maxRecipients, `profiles.${selected}.maxRecipients`),
     capabilities: resolveCapabilities(p),
+    imap: p.imap || {},
     legacy: false,
   };
 }

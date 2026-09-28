@@ -14,6 +14,6 @@ export function loadRules({ path, readFile } = {}) {
 }
 
 /** Persist the rules array inside a `{ rules: [...] }` container (pretty JSON + trailing newline). */
-export function saveRules(path, rules, { writeFile } = {}) {
-  writeJson(path, { rules }, { writeFile });
+export function saveRules(path, rules, { writeFile, chmod, warn } = {}) {
+  writeJson(path, { rules }, { writeFile, mode: 0o600, chmod, warn });
 }

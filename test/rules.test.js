@@ -21,6 +21,7 @@ describe('rules add', () => {
     expect(r).toMatchObject({ action: 'added', id: 'from-acme-com' });
     expect(r.rule).toEqual({ id: 'from-acme-com', match: 'from:acme.com', actions: ['label:Outreach/Acme', 'archive'], mailbox: 'INBOX' });
     expect(deps.written().rules).toHaveLength(1);
+    expect(deps.writeFile.mock.calls[0][2]).toBe(0o600);
   });
   it('honors --id, --mark read, --star, --important, --move, --trash', async () => {
     const deps = mkDeps();
@@ -52,6 +53,7 @@ describe('rules list / remove / export-xml', () => {
     const deps = mkDeps([{ id: 'a', match: 'from:x', actions: ['archive'], mailbox: 'INBOX' }]);
     expect(await runRulesRemove({ id: 'a' }, deps)).toEqual({ id: 'a', action: 'removed' });
     expect(deps.written().rules).toEqual([]);
+    expect(deps.writeFile.mock.calls[0][2]).toBe(0o600);
   });
   it('remove of an unknown id throws', async () => {
     await expect(runRulesRemove({ id: 'nope' }, mkDeps())).rejects.toThrow(/no rule/i);
@@ -64,6 +66,9 @@ describe('rules list / remove / export-xml', () => {
   });
 });
 
+// Build a realistic imapflow UIDPLUS uidMap covering every uid in a comma-joined range/number.
+const uidMapFor = (u) => new Map(String(u).split(',').map(Number).map((n) => [n, n + 900]));
+
 // Recording IMAP client whose search returns a fixed uid set.
 const mkClient = (uids) => {
   const calls = [];
@@ -73,7 +78,10 @@ const mkClient = (uids) => {
     mailboxOpen: async (m) => calls.push(['open', m]),
     search: async (q, o) => { calls.push(['search', q, o]); return uids; },
     messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
-    messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
+    messageMove: async (u, d, o) => {
+      calls.push(['move', u, d, o]);
+      return { uidMap: uidMapFor(u) };
+    },
   };
 };
 
@@ -95,7 +103,8 @@ describe('runRulesApply (direct)', () => {
     const rep = await runRulesApply({}, deps);
     expect(rep.rules[0].applied).toEqual([{ uid: 5, action: 'archive' }]);
     expect(rep.rules[0].skipped).toEqual([{ action: 'trash', reason: 'capability:delete' }]);
-    expect(client.calls.some((c) => c[0] === 'move')).toBe(false); // trash never executed
+    // trash never executed: no move to Trash (archive's own move to All Mail is expected)
+    expect(client.calls.some((c) => c[0] === 'move' && c[2] === '[Gmail]/Trash')).toBe(false);
     expect(client.logout).toHaveBeenCalled(); // withClient always logs out
   });
 

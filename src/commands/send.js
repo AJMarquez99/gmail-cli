@@ -1,5 +1,5 @@
 import { InvalidInputError } from '../lib/errors.js';
-import { toList, buildMessage } from '../compose.js';
+import { toList, buildMessage, formatFrom } from '../compose.js';
 import { resolveRecipients, enforceAllowlist, logSend } from '../transmit.js';
 
 export async function runSend(opts, deps) {
@@ -32,7 +32,7 @@ export async function runSend(opts, deps) {
   if (opts.dryRun) {
     return {
       dryRun: true,
-      from: message.from,
+      from: formatFrom(message.from),
       to: toResolved.filter(Boolean), cc: ccResolved.filter(Boolean), bcc: bccResolved.filter(Boolean),
       subject: message.subject, replyTo: message.replyTo || null, inReplyTo: opts.inReplyTo || null,
       hasHtml: message.html != null, hasText: message.text != null,
@@ -51,13 +51,13 @@ export async function runSend(opts, deps) {
   const info = await transporter.sendMail(message);
 
   const result = {
-    from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
+    from: formatFrom(message.from), to: toResolved, cc: ccResolved, bcc: bccResolved,
     subject: message.subject, messageId: info.messageId,
     accepted: info.accepted || [], rejected: info.rejected || [],
     attachments: attachmentsOut,
   };
 
-  logSend({ from: message.from, to: toResolved, cc: ccResolved, bcc: bccResolved,
+  logSend({ from: formatFrom(message.from), to: toResolved, cc: ccResolved, bcc: bccResolved,
     subject: message.subject, messageId: info.messageId,
     attachments: attachmentsOut.map((a) => a.filename),
     ...(opts.logBody || profile.sendLog.logBody ? { text: message.text ?? null, html: message.html ?? null } : {}) },

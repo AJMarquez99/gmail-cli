@@ -1,7 +1,7 @@
 # gmail-cli
 
 [![npm version](https://img.shields.io/npm/v/@ajmarquez99/gmail-cli)](https://www.npmjs.com/package/@ajmarquez99/gmail-cli)
-[![CI](https://github.com/AJMarquez99/gmail-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/AJMarquez99/gmail-cli/actions/workflows/ci.yml)
+[![CI](https://github.com/AJMarquez99/gmail-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/AJMarquez99/gmail-cli/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A Gmail CLI with a fail-closed recipient allowlist.
@@ -151,6 +151,9 @@ gmail label add 1234 Work
 gmail label remove 1234 Work
 # label add/remove default to INBOX; override with --mailbox if the message is elsewhere
 gmail label add 1234 Archived --mailbox "[Gmail]/All Mail"
+# removing a label from within that label's own mailbox (e.g. --mailbox Work; case-insensitive) moves the
+# message to All Mail. In a rule, later actions no longer see it: a later archive/move/trash is reported
+# as an error, while a later label/star/important/mark:read is unverified and still reports applied
 
 # Mark a message as read or unread
 gmail mark 1234 --read
@@ -184,7 +187,9 @@ remains send-only. HTML bodies are fetched but kept in memory only; nothing is p
 
 All read commands (`read`, `label`, `mark`) are profile-aware: use `--profile <name>` or set
 `GMAIL_PROFILE` to select an account. Per-profile IMAP host/port overrides can be set in
-`config.json` under `profiles.<name>.imap`:
+`config.json` under `profiles.<name>.imap`. IMAP connection timeouts (in milliseconds) can also
+be overridden per profile: `imap.connectionTimeout` (default `15000`), `imap.greetingTimeout`
+(default `10000`), and `imap.socketTimeout` (default `120000`):
 
 ```json
 {
@@ -192,7 +197,10 @@ All read commands (`read`, `label`, `mark`) are profile-aware: use `--profile <n
     "work": {
       "imap": {
         "host": "imap.example.com",
-        "port": 993
+        "port": 993,
+        "connectionTimeout": 15000,
+        "greetingTimeout": 10000,
+        "socketTimeout": 120000
       }
     }
   }
@@ -214,9 +222,13 @@ the single-account setup works exactly as before — profiles are purely opt-in.
 | Send log | `sent.jsonl` | `sent-<name>.jsonl` |
 | Identity (fromName, replyTo, signature) | top-level config keys | `profiles.<name>.*` |
 | Allowlist enforcement | `allowlist.enforce` | `profiles.<name>.allowlist.enforce` |
+| Attachment root | `attachRoot` (default: current directory) | `profiles.<name>.attachRoot` |
+| Fan-out cap | `maxRecipients` (default: `10`) | `profiles.<name>.maxRecipients` |
 
-File paths can be overridden per-profile via `gmail config set` (dotted keys such as
-`profiles.work.credentialsPath ~/secrets/work-creds.json`).
+File paths and settings can be set for any profile with a fully-qualified key
+(`gmail config set profiles.work.credentialsPath ~/secrets/work-creds.json`) or a bare key plus
+`--profile` (`gmail config set fromName "Work Me" --profile work`). The profile must already
+exist (`gmail profile add`).
 
 ### Profile resolution
 
@@ -301,6 +313,9 @@ Use `gmail allow add` / `gmail allow remove` to manage it from the CLI, or edit
 - Enforcement covers `--to`, `--cc`, and `--bcc`. If **any** recipient is not permitted, the
   whole send is rejected (nothing is sent) and the command exits `3`.
 - `--dry-run` reports would-be-blocked recipients without throwing — useful for pre-flight checks.
+  Two things still throw even under `--dry-run`, because they're hard refusals rather than
+  previewable denials: exceeding the recipient cap (`config.maxRecipients`, exit `2`) and a
+  locked-boundary allowlist bypass (exit `3`).
 - Matching is case-insensitive.
 - `gmail allow list` shows the current entries; `gmail doctor` reports the count and enforcement status.
 
@@ -324,6 +339,43 @@ gmail config set allowlist.enforce false
 ```
 
 The `--no-allowlist` flag overrides the config for a single send regardless of what the config says. To re-enable, run `gmail config set allowlist.enforce true` (or `gmail config unset allowlist.enforce`) and drop `--no-allowlist`.
+
+### Sealing the boundary (locked mode)
+
+By default, anything that can run `gmail` can also edit its own boundary (`gmail allow add`,
+`gmail config set allowlist.enforce false`, `--no-allowlist`, …). Locking the boundary makes the
+CLI refuse those boundary-widening commands. A human turns it on per environment or persistently:
+
+```bash
+export GMAIL_CLI_LOCKED=1          # or "true"; set it in the environment the agent runs in
+# or, persistently (a global key — always written at the top level of config.json,
+# never per profile, whatever profile is active):
+gmail config set locked true       # equivalent to hand-editing config.json: { "locked": true }
+```
+
+`locked` accepts only `true` or `false`; any other value (`1`, `yes`, ...) is rejected with exit `2`
+and nothing is written.
+
+While locked, these all refuse with **exit `3`** (nothing is written or sent):
+
+- `gmail allow add` / `gmail allow remove`
+- `gmail login`
+- `gmail config set|unset` of a boundary key — `allowlist.*`, `allowlistPath`, `credentialsPath`,
+  `attachRoot`, `maxRecipients`, `capabilities`, `deny`, `profiles`, and `locked` itself (also when
+  written as a fully-qualified `profiles.<name>.<key>`)
+- `gmail profile add` / `gmail profile remove` / `gmail profile caps --allow|--deny`
+- any send with enforcement off: `--no-allowlist`, or a profile whose `allowlist.enforce` is `false`
+
+Everything else (reading, enforced sends, drafts, `profile use`, non-boundary config such as
+`fromName`) works normally. Unlocking is a human action: clear `GMAIL_CLI_LOCKED` and set
+`locked` to `false` in `config.json` by hand.
+
+**What the lock does not cover.** The lock only governs changes made *through the CLI*. An agent
+that can set environment variables (e.g. `GMAIL_CLI_SETTINGS`, `GMAIL_ALLOWLIST`,
+`GMAIL_CLI_CONFIG`, `GMAIL_PROFILE`, `GMAIL_USER`/`GMAIL_APP_PASSWORD`, or `GMAIL_CLI_LOCKED` itself)
+or write the config directory can defeat it — by pointing the CLI at different files, or by editing them directly. For a real seal,
+fix the environment in the agent's launcher (so the agent cannot change it) and make
+`~/.config/gmail-cli` non-writable by the agent. See [SECURITY.md](SECURITY.md).
 
 ## Permissions & capabilities
 
@@ -417,9 +469,12 @@ gmail send --to alice@example.com --subject "Report" --body "# Report" --markdow
 # Pipe the body in (handy for agents / long content); --markdown works with piped input too
 generate-report | gmail send --to team@example.com --subject "Nightly report" --markdown
 
-# Attach files (repeatable; comma-separated ok; hard limit 25MB total, warning at 20MB)
+# Attach files (repeatable; comma-separated ok; hard limit 25MB total, warning at 20MB).
+# Attachments are confined to config.attachRoot (default: the current directory) — set it once,
+# then pass paths relative to it (or absolute paths under it).
+gmail config set attachRoot ~/docs
 gmail send --to alice@example.com --subject "Invoice" --body "See attached." \
-  --attach ~/docs/invoice.pdf --attach ~/docs/receipt.pdf
+  --attach invoice.pdf --attach receipt.pdf
 
 # Thread a reply (sets In-Reply-To and References)
 gmail send --to alice@example.com --subject "Re: Question" --body "Sure!" \
@@ -512,6 +567,7 @@ gmail move 17 "Saved"
 # Star / important toggles (alongside --read/--unread)
 gmail mark 17 --star          # or --unstar
 gmail mark 17 --important     # or --unimportant
+# --unstar in "[Gmail]/Starred" / --unimportant in "[Gmail]/Important" moves the message to All Mail
 
 # Label taxonomy management
 gmail label create "Outreach/Acme"
@@ -638,7 +694,7 @@ server-side equivalent and is omitted from the export.
 | `gmail allow list` | List allowed recipients and their aliases (read-only). |
 | `gmail allow add <email>` | Add a recipient to the allowlist (idempotent; merges aliases if entry already exists). |
 | `gmail allow remove <email\|alias>` | Remove a recipient by email address or alias. |
-| `gmail config set <key> <value>` | Set a config preference (dotted key; `true`/`false` coerced to boolean). |
+| `gmail config set <key> <value>` | Set a config preference (dotted key; `true`/`false` coerced to boolean). A fully-qualified `profiles.<name>.<key>` targets that profile directly, regardless of the active one. |
 | `gmail config get [key]` | Show one config key, or the whole config if no key is given. |
 | `gmail config unset <key>` | Remove a config key. |
 | `gmail log` | Show recent sent-mail log entries, newest first (alias: `gmail sent`). |
@@ -654,9 +710,13 @@ server-side equivalent and is omitted from the export.
 | `gmail rules apply` | Apply rules over IMAP (`--dry-run`, `--rule <id>`, `--limit <n>`). Gated: `organize` + per-action checks. |
 | `gmail rules export-xml` | Emit importable Gmail filter XML to stdout. Always allowed. |
 
-Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` recipient blocked by allowlist · `4` capability denied (command's bucket not granted to the profile).
+Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` blocked by the boundary (recipient not in the allowlist, or a sealed/locked boundary refusing a bypass/edit) · `4` capability denied (command's bucket not granted to the profile).
 
-`--dry-run` always exits `0` (even if recipients would be blocked — denials are reported in the output, not the exit code).
+> **Note on exit `4`:** the shared CLI-family contract defines `0/1/2/3`. `gmail-cli` adds `4` for capability-denied as a deliberate, documented extension so an orchestrator can distinguish "this profile may not do that" from "that recipient is blocked" (`3`). Consumers coded to the 4-code family should treat `4` like a `2`-class refusal.
+
+`--dry-run` always exits `0` for allowlist denials (reported in the output, not the exit code) —
+except exceeding the recipient cap (`config.maxRecipients`), which exits `2`, and a
+locked-boundary allowlist bypass, which exits `3`; both are refused outright even under `--dry-run`.
 
 ## `gmail login` options reference
 
@@ -681,7 +741,7 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 
 | Command | Description |
 |---|---|
-| `gmail config set <key> <value>` | Write a value. Dotted keys (`signature.text`) create/update nested objects. `true`/`false` strings are coerced to booleans. Unknown keys are written with a warning. |
+| `gmail config set <key> <value>` | Write a value. Dotted keys (`signature.text`) create/update nested objects. `true`/`false` strings are coerced to booleans. Unknown keys are written with a warning. A fully-qualified `profiles.<name>.<key>` writes to that profile's settings verbatim (the profile must already exist); a bare key with `--profile <name>` scopes to that profile the same way. |
 | `gmail config get [key]` | Print a single key's value, or the whole config if `[key]` is omitted. |
 | `gmail config unset <key>` | Delete a key (and its subtree if dotted). |
 
@@ -696,6 +756,8 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 | `sendLog.enabled` | `false` disables the send log globally | `--no-log` (per-send) |
 | `sendLog.logBody` | `true` includes body text in every log entry | `--log-body` (per-send) |
 | `allowlist.enforce` | `false` disables allowlist enforcement globally (default: `true`) | `--no-allowlist` (per-send) |
+| `attachRoot` | Directory `--attach` paths are confined to (default: the current directory); `~` expands to `$HOME`. Refused outright if it resolves to the filesystem root. | none — set per-send paths relative to it instead |
+| `maxRecipients` | Hard cap on to+cc+bcc combined for a single transmission (default: `10`); refused with exit `2` if exceeded. Enforced centrally, so it covers `send`, `reply`, `forward`, and `draft send` alike. Must be an integer >= 1 — `gmail config set maxRecipients <n>` rejects a non-integer, zero, or negative value with exit `2` and writes nothing; a value that reaches this state anyway (e.g. a hand-edited config file) fails closed with exit `2` the next time a profile is resolved, rather than silently disabling the cap. | none — split the send, or raise the cap |
 
 ## `gmail send` options reference
 
@@ -709,7 +771,7 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 | `--html <html>` | HTML body (mutually exclusive with `--markdown`) |
 | `--markdown` | Render `--body` (or stdin) as Markdown → HTML with inline email styles; plain-text fallback is the raw Markdown |
 | `--no-style` | With `--markdown`: skip the inline email styler (raw `marked` HTML output) |
-| `--attach <path>` | File attachment (repeatable; comma-separated ok); hard limit 25MB total, warning at 20MB |
+| `--attach <path>` | File attachment (repeatable; comma-separated ok); confined to `config.attachRoot` (default: the current directory) — a path resolving outside it, or an attachRoot that resolves to the filesystem root, is refused; hard limit 25MB total, warning at 20MB |
 | `--from-name <name>` | Display name on the `From` header (overrides `config.fromName`) |
 | `--reply-to <addr>` | `Reply-To` address (overrides `config.replyTo`) |
 | `--in-reply-to <messageId>` | `In-Reply-To` header; threads the email in Gmail |
@@ -740,7 +802,9 @@ win over config values.
   },
   "allowlist": {
     "enforce": true
-  }
+  },
+  "attachRoot": "~/docs",
+  "maxRecipients": 10
 }
 ```
 
@@ -785,10 +849,23 @@ gmail log --limit 5 # show last 5
   `credentials.json`.
 - The App Password is a long-lived secret with SMTP-send access to the account. Keep
   `credentials.json` at `chmod 600` (`gmail login` does this automatically); never commit it.
+- Every file this CLI writes under `~/.config/gmail-cli/` — `config.json`, `allowlist*.json`,
+  `rules*.json`, and `sent*.jsonl` (not just `credentials.json`) — is written owner-only (`chmod
+  600`) and re-tightened to `600` on every subsequent write/append, since a file's mode only
+  applies at creation. An install upgrading from an older version whose files were left
+  world-readable self-heals the next time each file is touched (`config set`, `allow add`,
+  `profile add`, `rules add`, sending), or immediately via a no-op `gmail init` (safe to re-run;
+  it never overwrites existing content, only permissions).
 - Scope is send-only by construction (SMTP). Revoke anytime at
   <https://myaccount.google.com/apppasswords>.
 - Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast
   radius of a misused App Password is limited to addresses you've explicitly approved.
+- A per-send fan-out cap (`config.maxRecipients`, default 10, must be an integer >= 1) further
+  bounds blast radius: any single transmission (send, reply, forward, or draft send) with more
+  than the cap combined across to/cc/bcc is refused outright with exit `2`, before the allowlist
+  is even consulted — even under `--dry-run`. The cap fails closed: a non-numeric or out-of-range
+  value is rejected at `config set` time (exit `2`, nothing written) and, if one reaches the config
+  file another way, at profile-resolution time (exit `2`), rather than silently disabling the cap.
 
 ## MCP server
 

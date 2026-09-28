@@ -1,4 +1,5 @@
 import { MissingCredentialsError, MalformedConfigError } from '../lib/errors.js';
+import { openImapClient } from '../imap.js';
 
 /**
  * Health check: are credentials present, and does Gmail accept them over SMTP and IMAP?
@@ -57,8 +58,7 @@ export async function runDoctor(opts, deps) {
 
   let imap;
   try {
-    const c = deps.createImapClient(creds, profile.imap || {});
-    await c.connect();
+    const c = await openImapClient(deps, creds, profile.imap || {});
     try {
       // Connected successfully; nothing else to probe here.
     } finally {

@@ -2,6 +2,7 @@ import { resolve, basename, sep } from 'node:path';
 import * as reader from '../reader.js';
 import { fetchRawMessage } from '../writer.js';
 import { InvalidInputError } from '../lib/errors.js';
+import { openImapClient } from '../imap.js';
 
 /**
  * Opens an IMAP client, runs the given operation, and ALWAYS logs out —
@@ -10,8 +11,7 @@ import { InvalidInputError } from '../lib/errors.js';
 export async function withClient(opts, deps, fn) {
   const profile = deps.resolveProfile(opts.profile);
   const creds = deps.resolveCredentials(profile.legacy ? {} : { path: profile.credentialsPath });
-  const client = deps.createImapClient(creds, profile.imap || {});
-  await client.connect();
+  const client = await openImapClient(deps, creds, profile.imap || {});
   try {
     return await fn(client, profile);
   } finally {

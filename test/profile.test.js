@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveProfile } from '../src/profile.js';
-import { InvalidInputError } from '../src/lib/errors.js';
+import { InvalidInputError, MalformedConfigError } from '../src/lib/errors.js';
 const ENV = { HOME: '/h' };
 
 describe('resolveProfile — legacy (no profiles)', () => {
@@ -103,6 +103,58 @@ describe('resolveProfile — capabilities', () => {
     const p = resolveProfile({ env: ENV, config, name: 'biz' });
     expect(p.capabilities.allowed.has('draft')).toBe(true);
     expect(p.capabilities.allowed.has('send')).toBe(false);
+  });
+});
+
+describe('resolveProfile — imap overrides', () => {
+  it('returns per-profile imap overrides', () => {
+    const p = resolveProfile({ env: ENV, config: { profiles: { w: { imap: { host: 'h', port: 1 } } } }, name: 'w' });
+    expect(p.imap).toEqual({ host: 'h', port: 1 });
+  });
+  it('imap defaults to {} in both modes', () => {
+    expect(resolveProfile({ env: ENV, config: {}, name: undefined }).imap).toEqual({});
+    expect(resolveProfile({ env: ENV, config: { profiles: { w: {} } }, name: 'w' }).imap).toEqual({});
+  });
+});
+
+describe('resolveProfile — maxRecipients', () => {
+  it('legacy: defaults to 10 when absent', () => {
+    expect(resolveProfile({ env: ENV, config: {}, name: undefined }).maxRecipients).toBe(10);
+  });
+  it('legacy: a numeric string coerces to a number', () => {
+    expect(resolveProfile({ env: ENV, config: { maxRecipients: '5' }, name: undefined }).maxRecipients).toBe(5);
+  });
+  it('legacy: throws MalformedConfigError (exit 2) for a non-numeric value', () => {
+    const err = (() => {
+      try { resolveProfile({ env: ENV, config: { maxRecipients: 'abc' }, name: undefined }); return null; }
+      catch (e) { return e; }
+    })();
+    expect(err).toBeInstanceOf(MalformedConfigError);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/maxRecipients/);
+  });
+  it('legacy: throws MalformedConfigError for 0 (not >= 1)', () => {
+    expect(() => resolveProfile({ env: ENV, config: { maxRecipients: 0 }, name: undefined })).toThrow(
+      MalformedConfigError,
+    );
+  });
+  it('profile mode: defaults to 10 when absent', () => {
+    const config = { profiles: { work: {} } };
+    expect(resolveProfile({ env: ENV, config, name: 'work' }).maxRecipients).toBe(10);
+  });
+  it('profile mode: a numeric string coerces to a number', () => {
+    const config = { profiles: { work: { maxRecipients: '5' } } };
+    expect(resolveProfile({ env: ENV, config, name: 'work' }).maxRecipients).toBe(5);
+  });
+  it('profile mode: throws MalformedConfigError naming the fully-qualified key', () => {
+    const config = { profiles: { work: { maxRecipients: 'abc' } } };
+    const err = (() => {
+      try { resolveProfile({ env: ENV, config, name: 'work' }); return null; }
+      catch (e) { return e; }
+    })();
+    expect(err).toBeInstanceOf(MalformedConfigError);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/profiles\.work\.maxRecipients/);
   });
 });
 

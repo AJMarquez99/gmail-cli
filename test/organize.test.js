@@ -44,6 +44,7 @@ function makeDeps({ throwInOp = false } = {}) {
     async messageMove(uid, destination, opts) {
       if (throwInOp) throw new Error('messageMove exploded');
       this._messageMoves.push({ uid, destination, opts });
+      return { uidMap: new Map(String(uid).split(',').map(Number).map((n) => [n, n + 900])) };
     },
 
     async messageDelete(uid, opts) {
@@ -72,14 +73,14 @@ function makeDeps({ throwInOp = false } = {}) {
 // ---------------------------------------------------------------------------
 
 describe('runArchive', () => {
-  it('calls messageFlagsRemove with [\\\\Inbox] and useLabels, returns { action:"archived", uid }', async () => {
+  it('calls messageMove to All Mail, returns { action:"archived", uid }', async () => {
     const deps = makeDeps();
     const result = await runArchive({ uid: '7', mailbox: 'INBOX' }, deps);
     expect(result).toEqual({ uid: 7, mailbox: 'INBOX', action: 'archived' });
-    const call = deps._client._flagsRemoveCalls[0];
+    const call = deps._client._messageMoves[0];
     expect(call.uid).toBe(7);
-    expect(call.flags).toEqual(['\\Inbox']);
-    expect(call.opts).toMatchObject({ uid: true, useLabels: true });
+    expect(call.destination).toBe('[Gmail]/All Mail');
+    expect(call.opts).toMatchObject({ uid: true });
   });
 
   it('calls connect() and logout() on success', async () => {
@@ -91,7 +92,7 @@ describe('runArchive', () => {
 
   it('calls logout() even when the op throws', async () => {
     const deps = makeDeps({ throwInOp: true });
-    await expect(runArchive({ uid: '7', mailbox: 'INBOX' }, deps)).rejects.toThrow('flagsRemove exploded');
+    await expect(runArchive({ uid: '7', mailbox: 'INBOX' }, deps)).rejects.toThrow('messageMove exploded');
     expect(deps._client.loggedOut).toBe(true);
   });
 });
@@ -221,9 +222,9 @@ describe('CLI integration — archive', () => {
     } finally {
       outSpy.mockRestore();
     }
-    const call = deps._client._flagsRemoveCalls[0];
+    const call = deps._client._messageMoves[0];
     expect(call.uid).toBe(7);
-    expect(call.flags).toEqual(['\\Inbox']);
+    expect(call.destination).toBe('[Gmail]/All Mail');
   });
 });
 

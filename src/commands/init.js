@@ -4,6 +4,7 @@ import { resolveSettingsPath } from '../config.js';
 import { resolveConfigPath } from '../auth/credentials.js';
 import { ALLOWLIST_TEMPLATE, CONFIG_TEMPLATE } from '../lib/templates.js';
 import { MissingCredentialsError } from '../lib/errors.js';
+import { tightenMode } from '../lib/permissions.js';
 
 export async function runInit(_opts, deps) {
   const env = deps.env;
@@ -33,7 +34,11 @@ export async function runInit(_opts, deps) {
       created.push(path);
     }
     // Safety net: writeFileIfAbsent only writes if the file is absent.
-    deps.writeFileIfAbsent(path, template);
+    deps.writeFileIfAbsent(path, template, 0o600);
+    // `init` is safe/idempotent to re-run, so use it as the repair path: re-tighten permissions
+    // even on an already-existing file (e.g. left at 0644 by a pre-hardening install) — its
+    // content is never touched here, only its mode.
+    tightenMode(path, 0o600, { chmod: deps.chmod, warn: deps.warn });
   }
 
   // Credential check — never prompt or write secrets, just report status.

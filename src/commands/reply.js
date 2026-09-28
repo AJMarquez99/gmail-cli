@@ -1,5 +1,5 @@
 import { withClient } from './read.js';
-import { buildMessage, buildRawMime, toList } from '../compose.js';
+import { buildMessage, buildRawMime, toList, formatFrom } from '../compose.js';
 import { fetchRawMessage, appendDraft } from '../writer.js';
 import { resolveRecipients, enforceAllowlist, logSend } from '../transmit.js';
 import { InvalidInputError } from '../lib/errors.js';
@@ -74,7 +74,7 @@ export async function runReply(opts, deps) {
     synthetic, { profile, creds }, deps,
   );
   const info = await deps.createTransport(creds).sendMail(message);
-  logSend({ from: message.from, to: toResolved, cc: ccResolved, subject, messageId: info.messageId }, opts, { profile }, deps);
+  logSend({ from: formatFrom(message.from), to: toResolved, cc: ccResolved, subject, messageId: info.messageId }, opts, { profile }, deps);
   return { action: 'replied', to: toResolved, cc: ccResolved, subject, messageId: info.messageId, accepted: info.accepted || [] };
 }
 
@@ -111,7 +111,7 @@ export async function runForward(opts, deps) {
   if (origAtts.length) message.attachments = [...(message.attachments || []), ...origAtts];
 
   const info = await deps.createTransport(creds).sendMail(message);
-  logSend({ from: message.from, to: toResolved, subject, messageId: info.messageId }, opts, { profile }, deps);
+  logSend({ from: formatFrom(message.from), to: toResolved, subject, messageId: info.messageId }, opts, { profile }, deps);
   return { action: 'forwarded', to: toResolved, subject, messageId: info.messageId, accepted: info.accepted || [],
     attachments: origAtts.map((a) => a.filename) };
 }
