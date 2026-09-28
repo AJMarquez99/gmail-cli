@@ -51,7 +51,21 @@ describe('openImapClient', () => {
       warn: vi.fn(),
     };
     await expect(openImapClient(deps, {}, {}, { timeoutMs: 20 })).resolves.toBe(second);
-    expect(deps.warn).toHaveBeenCalledWith(expect.stringMatching(/timed out.*retrying/));
+    // deps.warn adds the "warn: " prefix and trailing newline itself — pass the bare message.
+    expect(deps.warn).toHaveBeenCalledTimes(1);
+    expect(deps.warn).toHaveBeenCalledWith('IMAP connect timed out after 20ms; retrying (1/1)');
+  });
+
+  it('with no deps.warn, the fallback writes exactly one "warn: " prefix and newline to stderr', async () => {
+    const first = hung(), second = ok();
+    const deps = { createImapClient: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second) };
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await expect(openImapClient(deps, {}, {}, { timeoutMs: 20 })).resolves.toBe(second);
+      expect(spy).toHaveBeenCalledWith('warn: IMAP connect timed out after 20ms; retrying (1/1)\n');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   // ---------------------------------------------------------------------

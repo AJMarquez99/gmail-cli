@@ -28,7 +28,7 @@ const IMAP_TIMEOUT_CODES = new Set(['CONNECT_TIMEOUT', 'GREETING_TIMEOUT']);
 export async function openImapClient(deps, creds, imapOpts = {}, {
   timeoutMs = deps.imapConnectTimeoutMs ?? 30000,
   retries = 1,
-  warn = deps.warn ?? ((m) => process.stderr.write(m)),
+  warn = deps.warn ?? ((m) => process.stderr.write(`warn: ${m}\n`)),
 } = {}) {
   for (let attempt = 0; ; attempt++) {
     const client = deps.createImapClient(creds, imapOpts);
@@ -51,6 +51,6 @@ export async function openImapClient(deps, creds, imapOpts = {}, {
     if (!timedOut) return client;
     try { client.close?.(); } catch { /* already dead */ }
     if (attempt >= retries) throw new ImapTimeoutError(timeoutMs, retries + 1);
-    warn(`warn: IMAP connect timed out after ${timeoutMs}ms; retrying (${attempt + 1}/${retries})\n`);
+    warn(`IMAP connect timed out after ${timeoutMs}ms; retrying (${attempt + 1}/${retries})`);
   }
 }
