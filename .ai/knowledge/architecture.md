@@ -115,9 +115,11 @@ held in memory only.
 
 **`openImapClient(deps, creds, imapOpts)` (`src/imap.js`) is the single connect choke point** — every
 call site that opens an IMAP session (`withClient`, `doctor`, `draft send`) goes through it, not
-`createImapClient(...).connect()` directly. It races each `connect()` attempt against a hard deadline
-(`IMAP_DEFAULTS`: 15s connect / 10s greeting / 120s socket, overridable per profile via `profile.imap`),
-retries once on a fresh client after closing the stalled one, and throws `ImapTimeoutError` on final
+`createImapClient(...).connect()` directly. It races each `connect()` attempt against a 30s hard
+deadline (`deps.imapConnectTimeoutMs`, default 30000). Separately, imapflow's own client options come
+from `IMAP_DEFAULTS` (15s connect / 10s greeting / 120s socket, overridable per profile via
+`profile.imap`); an imapflow `CONNECT_TIMEOUT`/`GREETING_TIMEOUT` rejection is treated as a timeout too.
+On a timeout it retries once on a fresh client after closing the stalled one, and throws `ImapTimeoutError` on final
 failure. A stalled TLS handshake or greeting must never hang a command forever — if you add a new
 IMAP-opening command, route it through `openImapClient`, not a bare `client.connect()`.
 
@@ -126,10 +128,15 @@ IMAP-opening command, route it through `openImapClient`, not a bare `client.conn
 `archiveMessage` (`src/writer.js`) archives by **`MOVE` to `[Gmail]/All Mail`**, never by removing the
 `\Inbox` label via `messageFlagsRemove`. Gmail omits the currently-selected mailbox's own label from
 `X-GM-LABELS`, so removing `\Inbox` while INBOX is selected is a silent, successful no-op — the bug
-this shipped with before the v1.0.0 hardening pass. Every writer that reports success **verifies the
-server's response** (`messageMove`'s `uidMap` covers the requested UIDs) rather than returning a
-hand-built result unconditionally; a writer that can't confirm the mutation happened must throw, not
-report success on faith.
+this shipped with before the v1.0.0 hardening pass. The MOVE-based writers — `archiveMessage`,
+`moveMessage`, and `trashMessage` — **verify the server's response** through one shared helper
+(`moveVerified`): `false` → `GmailError` (exit 1); no/empty `uidMap` (nothing moved) →
+`InvalidInputError` (exit 2) naming the verb, uid and mailbox; a `uidMap` smaller than the
+de-duplicated requested UIDs → `GmailError` (partial move). So a rule with `archive` then `trash`
+records the trash as an error instead of reporting it applied. The flag/label writers (`addLabel`,
+`removeLabel`, `markMessage`, `starMessage`, `importantMessage`) do **not** yet verify a server
+result — imapflow's STORE gives no per-UID confirmation to check — so treat their success as
+"command accepted", not "state confirmed". A new MOVE-style writer must go through `moveVerified`.
 
 ## Attachment confinement
 
@@ -146,12 +153,15 @@ URL by path/href.
 
 `isBoundaryLocked` (`src/lock.js`) is a single global (top-level `config.locked`, never
 `profiles.<name>.locked`) switch checked before any CLI-reachable action that could widen the
-boundary: allowlist edits, boundary-related config keys (`allowlist.*`, `attachRoot`, `maxRecipients`,
-`capabilities`, `deny`, `profiles`, `locked` itself — matched on the bare subkey so a fully-qualified
+boundary: allowlist edits, boundary-related config keys (`BOUNDARY_KEYS` in `src/commands/config.js`:
+`allowlist.*`, `allowlistPath`, `credentialsPath`, `attachRoot`, `maxRecipients`, `capabilities`, `deny`,
+`profiles`, `locked` itself — matched on the bare subkey so a fully-qualified
 `profiles.<name>.<key>` can't sneak past it), `login`, profile add/remove/caps changes, and any send
 that tries to disable enforcement. It governs only changes made **through the CLI** — see SECURITY.md
 for the explicit limit (an agent that controls the process's environment variables or the config
-directory can defeat it).
+directory can defeat it). `defaultProfile` is deliberately **not** a boundary key: it stays a global
+(top-level-only) key, but switching among existing profiles is allowed while locked, same as
+`profile use` / `--profile`.
 
 ## Multi-account profiles
 

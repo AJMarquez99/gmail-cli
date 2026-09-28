@@ -46,7 +46,7 @@ update that npm config to match or publishing stops. No secret needs to be creat
 
 ## What ships
 
-Only the `files` allowlist in `package.json`: `bin/`, `src/`, `README.md`, `LICENSE`. Tests,
+Only the `files` allowlist in `package.json`: `bin/`, `src/`, `README.md`, `SECURITY.md`, `LICENSE`. Tests,
 `.github/`, and `.ai/` are **not** published. Sanity-check the tarball before a big release:
 
 ```bash
