@@ -310,6 +310,9 @@ Use `gmail allow add` / `gmail allow remove` to manage it from the CLI, or edit
 - Enforcement covers `--to`, `--cc`, and `--bcc`. If **any** recipient is not permitted, the
   whole send is rejected (nothing is sent) and the command exits `3`.
 - `--dry-run` reports would-be-blocked recipients without throwing — useful for pre-flight checks.
+  Two things still throw even under `--dry-run`, because they're hard refusals rather than
+  previewable denials: exceeding the recipient cap (`config.maxRecipients`, exit `2`) and a
+  locked-boundary allowlist bypass (exit `3`).
 - Matching is case-insensitive.
 - `gmail allow list` shows the current entries; `gmail doctor` reports the count and enforcement status.
 
@@ -702,7 +705,9 @@ server-side equivalent and is omitted from the export.
 
 Exit codes: `0` ok · `1` send/network/IMAP failure · `2` user-fixable config (missing creds, bad input, conflicting/unknown capability config) · `3` recipient blocked by allowlist · `4` capability denied (command's bucket not granted to the profile).
 
-`--dry-run` always exits `0` (even if recipients would be blocked — denials are reported in the output, not the exit code).
+`--dry-run` always exits `0` for allowlist denials (reported in the output, not the exit code) —
+except exceeding the recipient cap (`config.maxRecipients`), which exits `2`, and a
+locked-boundary allowlist bypass, which exits `3`; both are refused outright even under `--dry-run`.
 
 ## `gmail login` options reference
 
@@ -743,7 +748,7 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 | `sendLog.logBody` | `true` includes body text in every log entry | `--log-body` (per-send) |
 | `allowlist.enforce` | `false` disables allowlist enforcement globally (default: `true`) | `--no-allowlist` (per-send) |
 | `attachRoot` | Directory `--attach` paths are confined to (default: the current directory); `~` expands to `$HOME`. Refused outright if it resolves to the filesystem root. | none — set per-send paths relative to it instead |
-| `maxRecipients` | Hard cap on to+cc+bcc combined for a single transmission (default: `10`); refused with exit `2` if exceeded. Enforced centrally, so it covers `send`, `reply`, `forward`, and `draft send` alike. | none — split the send, or raise the cap |
+| `maxRecipients` | Hard cap on to+cc+bcc combined for a single transmission (default: `10`); refused with exit `2` if exceeded. Enforced centrally, so it covers `send`, `reply`, `forward`, and `draft send` alike. Must be an integer >= 1 — `gmail config set maxRecipients <n>` rejects a non-integer, zero, or negative value with exit `2` and writes nothing; a value that reaches this state anyway (e.g. a hand-edited config file) fails closed with exit `2` the next time a profile is resolved, rather than silently disabling the cap. | none — split the send, or raise the cap |
 
 ## `gmail send` options reference
 
@@ -839,9 +844,12 @@ gmail log --limit 5 # show last 5
   <https://myaccount.google.com/apppasswords>.
 - Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast
   radius of a misused App Password is limited to addresses you've explicitly approved.
-- A per-send fan-out cap (`config.maxRecipients`, default 10) further bounds blast radius: any
-  single transmission (send, reply, forward, or draft send) with more than the cap combined
-  across to/cc/bcc is refused outright with exit `2`, before the allowlist is even consulted.
+- A per-send fan-out cap (`config.maxRecipients`, default 10, must be an integer >= 1) further
+  bounds blast radius: any single transmission (send, reply, forward, or draft send) with more
+  than the cap combined across to/cc/bcc is refused outright with exit `2`, before the allowlist
+  is even consulted — even under `--dry-run`. The cap fails closed: a non-numeric or out-of-range
+  value is rejected at `config set` time (exit `2`, nothing written) and, if one reaches the config
+  file another way, at profile-resolution time (exit `2`), rather than silently disabling the cap.
 
 ## MCP server
 

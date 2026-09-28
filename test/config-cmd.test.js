@@ -49,6 +49,33 @@ describe('runConfigSet', () => {
   });
 });
 
+describe('runConfigSet — maxRecipients validation', () => {
+  it('stores a valid integer as a NUMBER', async () => {
+    const d = deps();
+    const out = await runConfigSet({ key: 'maxRecipients', value: '5' }, d);
+    expect(out.value).toBe(5);
+    expect(written(d)).toEqual({ maxRecipients: 5 });
+  });
+  it.each(['abc', '0', '-1', '2.5'])('rejects "%s" with exit 2 and writes nothing', async (bad) => {
+    const d = deps();
+    const err = await runConfigSet({ key: 'maxRecipients', value: bad }, d).catch((e) => e);
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/maxRecipients/);
+    expect(d.writeFile).not.toHaveBeenCalled();
+  });
+  it('validates the same way for a fully-qualified profiles.<name>.maxRecipients key', async () => {
+    const cfg = { profiles: { work: {} } };
+    const d = deps({ file: JSON.stringify(cfg), config: cfg });
+    const err = await runConfigSet({ key: 'profiles.work.maxRecipients', value: 'abc' }, d).catch((e) => e);
+    expect(err.exitCode).toBe(2);
+    expect(d.writeFile).not.toHaveBeenCalled();
+
+    const ok = await runConfigSet({ key: 'profiles.work.maxRecipients', value: '3' }, d);
+    expect(ok.value).toBe(3);
+    expect(written(d)).toEqual({ profiles: { work: { maxRecipients: 3 } } });
+  });
+});
+
 describe('runConfigGet', () => {
   it('returns a single key', async () => {
     const d = deps({ file: JSON.stringify({ fromName: 'X' }) });

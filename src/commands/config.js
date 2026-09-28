@@ -83,13 +83,24 @@ function refuseIfLocked(key, deps) {
   }
 }
 
+// `maxRecipients` bypasses the generic true/false-or-string coercion: it must resolve to an
+// integer >= 1, stored as a NUMBER, or resolveProfile's `total > max` check silently never fires
+// (e.g. a typo'd "abc" coerces via Number() to NaN, and every comparison against NaN is false).
+function coerceMaxRecipients(key, value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new InvalidInputError(`"${key}" must be an integer >= 1 (got: ${JSON.stringify(value)}).`);
+  }
+  return n;
+}
+
 export async function runConfigSet(opts, deps) {
   const { key, value } = opts;
   refuseIfLocked(key, deps);
   const profile = deps.resolveProfile(opts.profile);
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
-  const v = coerce(value);
+  const v = bareKey(key) === 'maxRecipients' ? coerceMaxRecipients(key, value) : coerce(value);
   const kp = keyPath(profile, key, config);
   const next = setPath(config, kp, v);
   const unknownKey = !KNOWN_KEYS.has(bareKey(key)) || undefined;
