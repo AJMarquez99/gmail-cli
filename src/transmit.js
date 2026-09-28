@@ -1,15 +1,24 @@
 import { makeAllowChecker } from './allowlist.js';
-import { RecipientNotAllowedError, InvalidInputError } from './lib/errors.js';
+import { RecipientNotAllowedError, InvalidInputError, BoundaryLockedError } from './lib/errors.js';
 
 const ENFORCE_OFF_WARNING =
   'warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).\n';
 
 /**
  * Resolve to/cc/bcc against the profile allowlist. Returns resolved arrays + the collected
- * denials + the enforce flag. Does NOT throw (callers gate; send supports dry-run reporting).
+ * denials + the enforce flag. Does NOT throw on denials (callers gate; send supports dry-run
+ * reporting) — but DOES throw BoundaryLockedError when enforcement would be off (a
+ * --no-allowlist bypass or config allowlist.enforce:false) while the boundary is locked.
  */
-export function resolveRecipients({ to = [], cc = [], bcc = [] }, opts, { profile, creds }, deps) {
+export function resolveRecipients(lists, opts, { profile, creds }, deps) {
   const enforce = !(opts.noAllowlist || opts.allowlist === false) && profile.allowlistEnforce;
+  if (!enforce && deps.isBoundaryLocked?.()) {
+    throw new BoundaryLockedError('the recipient allowlist bypass');
+  }
+  return resolveAgainstAllowlist(lists, enforce, { profile, creds }, deps);
+}
+
+function resolveAgainstAllowlist({ to = [], cc = [], bcc = [] }, enforce, { profile, creds }, deps) {
   const { resolve } = makeAllowChecker({ allowlist: deps.loadAllowlist({ path: profile.allowlistPath }), self: creds.user });
   const denied = [];
   const allow = (list) =>
@@ -24,7 +33,8 @@ export function resolveRecipients({ to = [], cc = [], bcc = [] }, opts, { profil
 
 /** Expand allowlist aliases WITHOUT enforcing (drafts never transmit). Rejects tokens that are still not addresses. */
 export function expandRecipients(lists, { profile, creds }, deps) {
-  const { to, cc, bcc } = resolveRecipients(lists, { noAllowlist: true }, { profile, creds }, deps);
+  // Non-enforcing by design (nothing is transmitted), so it is not a bypass and the lock does not apply.
+  const { to, cc, bcc } = resolveAgainstAllowlist(lists, false, { profile, creds }, deps);
   const bad = [...to, ...cc, ...bcc].filter((t) => !String(t).includes('@'));
   if (bad.length) throw new InvalidInputError(`Unknown alias or invalid address: ${bad.map((t) => `"${t}"`).join(', ')}`);
   return { to, cc, bcc };

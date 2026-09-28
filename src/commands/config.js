@@ -1,7 +1,7 @@
 import { dirname } from 'node:path';
 import { resolveSettingsPath } from '../config.js';
 import { readJson, writeJson, getPath, setPath, unsetPath, coerce } from '../lib/jsonfile.js';
-import { InvalidInputError } from '../lib/errors.js';
+import { InvalidInputError, BoundaryLockedError } from '../lib/errors.js';
 
 const KNOWN_KEYS = new Set([
   'fromName',
@@ -11,6 +11,7 @@ const KNOWN_KEYS = new Set([
   'sendLog.enabled',
   'sendLog.logBody',
   'allowlist.enforce',
+  'locked',
   'attachRoot',
   'credentialsPath',
   'allowlistPath',
@@ -47,8 +48,30 @@ function keyPath(profile, key, config) {
 
 const bareKey = (key) => (key.startsWith('profiles.') ? key.split('.').slice(2).join('.') : key);
 
+// Top-level settings that define the boundary: the allowlist (enforcement + which file), the
+// credentials file, the attachment root, capability scope, profile topology, and the lock itself.
+// Matched on the FIRST segment of the bare key, so `allowlist.enforce` and a fully-qualified
+// `profiles.<name>.allowlist.enforce` are both covered.
+const BOUNDARY_KEYS = new Set([
+  'allowlist',
+  'allowlistPath',
+  'credentialsPath',
+  'attachRoot',
+  'capabilities',
+  'deny',
+  'locked',
+  'profiles',
+]);
+
+function refuseIfLocked(key, deps) {
+  if (BOUNDARY_KEYS.has(bareKey(key).split('.')[0]) && deps.isBoundaryLocked?.()) {
+    throw new BoundaryLockedError(`changing the boundary setting "${key}"`);
+  }
+}
+
 export async function runConfigSet(opts, deps) {
   const { key, value } = opts;
+  refuseIfLocked(key, deps);
   const profile = deps.resolveProfile(opts.profile);
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
@@ -81,6 +104,7 @@ export async function runConfigGet(opts, deps) {
 
 export async function runConfigUnset(opts, deps) {
   const { key } = opts;
+  refuseIfLocked(key, deps);
   const profile = deps.resolveProfile(opts.profile);
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });

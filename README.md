@@ -333,6 +333,31 @@ gmail config set allowlist.enforce false
 
 The `--no-allowlist` flag overrides the config for a single send regardless of what the config says. To re-enable, run `gmail config set allowlist.enforce true` (or `gmail config unset allowlist.enforce`) and drop `--no-allowlist`.
 
+### Sealing the boundary (locked mode)
+
+By default, anything that can run `gmail` can also edit its own boundary (`gmail allow add`,
+`gmail config set allowlist.enforce false`, `--no-allowlist`, …). To take that away from an agent,
+a human locks the boundary — either per environment or persistently:
+
+```bash
+export GMAIL_CLI_LOCKED=1          # or "true"; set it in the environment the agent runs in
+# or, persistently, by hand-editing config.json:  { "locked": true }
+```
+
+While locked, these all refuse with **exit `3`** (nothing is written or sent):
+
+- `gmail allow add` / `gmail allow remove`
+- `gmail login`
+- `gmail config set|unset` of a boundary key — `allowlist.*`, `allowlistPath`, `credentialsPath`,
+  `attachRoot`, `capabilities`, `deny`, `profiles`, and `locked` itself (also when written as a
+  fully-qualified `profiles.<name>.<key>`)
+- `gmail profile add` / `gmail profile remove` / `gmail profile caps --allow|--deny`
+- any send with enforcement off: `--no-allowlist`, or a profile whose `allowlist.enforce` is `false`
+
+Everything else (reading, enforced sends, drafts, `profile use`, non-boundary config such as
+`fromName`) works normally. Unlocking is a human action: clear `GMAIL_CLI_LOCKED` and set
+`locked` to `false` in `config.json` by hand.
+
 ## Permissions & capabilities
 
 Each profile can be scoped to a least-privilege set of **capabilities** — so you can attach, say, a

@@ -1,7 +1,7 @@
 import { dirname } from 'node:path';
 import { resolveSettingsPath } from '../config.js';
 import { readJson, writeJson } from '../lib/jsonfile.js';
-import { InvalidInputError } from '../lib/errors.js';
+import { InvalidInputError, BoundaryLockedError } from '../lib/errors.js';
 import { BUCKETS, resolveCapabilities } from '../capabilities.js';
 
 /**
@@ -10,6 +10,7 @@ import { BUCKETS, resolveCapabilities } from '../capabilities.js';
  * via `gmail config` or `gmail login`.
  */
 export async function runProfileAdd(opts, deps) {
+  if (deps.isBoundaryLocked?.()) throw new BoundaryLockedError('adding a profile');
   const { name } = opts;
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
@@ -77,6 +78,7 @@ export async function runProfileUse(opts, deps) {
  * one) or clears defaultProfile entirely.
  */
 export async function runProfileRemove(opts, deps) {
+  if (deps.isBoundaryLocked?.()) throw new BoundaryLockedError('removing a profile');
   const { name } = opts;
   const path = resolveSettingsPath(deps.env);
   const config = readJson(path, { readFile: deps.readFile });
@@ -126,6 +128,9 @@ export async function runProfileCaps(opts, deps) {
   const allow = opts.allow ? parseBuckets(opts.allow) : null;
   const deny = opts.deny ? parseBuckets(opts.deny) : null;
   if (allow && deny) throw new InvalidInputError('Use either --allow or --deny, not both.');
+  if ((allow || deny) && deps.isBoundaryLocked?.()) {
+    throw new BoundaryLockedError('changing profile capabilities');
+  }
 
   if (!allow && !deny) {
     const caps = resolveCapabilities(config.profiles[name]);

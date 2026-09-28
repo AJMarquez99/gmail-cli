@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { InvalidInputError } from '../lib/errors.js';
+import { InvalidInputError, BoundaryLockedError } from '../lib/errors.js';
 
 /**
  * Guided credential setup. Prompts for the Gmail address and App Password
@@ -12,6 +12,7 @@ import { InvalidInputError } from '../lib/errors.js';
  * @param {object} deps  - { env, resolveProfile, fileExists, ensureDir, writeFile, prompt, promptHidden }
  */
 export async function runLogin(opts, deps) {
+  if (deps.isBoundaryLocked?.()) throw new BoundaryLockedError('changing credentials (login)');
   const profile = deps.resolveProfile(opts.profile);
   const path = profile.credentialsPath;
 

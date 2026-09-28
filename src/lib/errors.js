@@ -1,8 +1,8 @@
-// Exit-code scheme: 2 = user-fixable config, 3 = recipient blocked by the allowlist, 4 = capability denied, 1 = everything else.
+// Exit-code scheme: 2 = user-fixable config, 3 = blocked by the boundary (allowlist / lock), 4 = capability denied, 1 = everything else.
 export const EXIT_CODES = {
   GENERIC: 1, // unexpected / SMTP / network failure
   CONFIG: 2, // user-fixable config (missing credentials, bad input)
-  FORBIDDEN: 3, // recipient blocked by the allowlist policy
+  FORBIDDEN: 3, // blocked by the boundary (allowlist policy or a locked boundary)
   CAPABILITY_DENIED: 4, // profile lacks required capability
 };
 
@@ -53,6 +53,16 @@ export class RecipientNotAllowedError extends GmailError {
       EXIT_CODES.FORBIDDEN,
     );
     this.denied = denied;
+  }
+}
+
+export class BoundaryLockedError extends GmailError {
+  constructor(what) {
+    super(
+      `Boundary is locked (GMAIL_CLI_LOCKED or config.locked) — ${what} is refused.\n` +
+        `Unlocking is a human action: clear GMAIL_CLI_LOCKED and set config.locked to false, then retry.`,
+      EXIT_CODES.FORBIDDEN,
+    );
   }
 }
 

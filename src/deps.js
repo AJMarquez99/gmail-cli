@@ -6,6 +6,7 @@ import { createGmailTransport } from './transport.js';
 import { createImapClient } from './imap.js';
 import { loadAllowlist } from './allowlist.js';
 import { loadConfig } from './config.js';
+import { isBoundaryLocked } from './lock.js';
 import { appendSendLog, readSendLog } from './lib/sendlog.js';
 import { resolveProfile } from './profile.js';
 
@@ -19,6 +20,7 @@ export const defaultDeps = {
   parseMessage: (source) => simpleParser(source),
   loadAllowlist: (o) => loadAllowlist(o || {}),
   loadConfig: () => loadConfig({}),
+  isBoundaryLocked: () => isBoundaryLocked({ env: process.env, config: loadConfig({}) }),
   statFile: (p) => statSync(p),
   readFileBytes: (p) => readFileSync(p),
   realpath: (p) => realpathSync(p),

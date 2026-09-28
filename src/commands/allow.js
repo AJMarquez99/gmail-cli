@@ -1,6 +1,6 @@
 import { dirname } from 'node:path';
 import { readJson, writeJson } from '../lib/jsonfile.js';
-import { InvalidInputError } from '../lib/errors.js';
+import { InvalidInputError, BoundaryLockedError } from '../lib/errors.js';
 
 // Read-only view of the recipient allowlist. Editing is done by hand in the JSON file.
 export async function runAllowList(opts, deps) {
@@ -25,6 +25,7 @@ function save(deps, path, data) {
 }
 
 export async function runAllowAdd(opts, deps) {
+  if (deps.isBoundaryLocked?.()) throw new BoundaryLockedError('editing the allowlist');
   const { email, alias = [] } = opts;
 
   if (!email || !email.includes('@')) {
@@ -85,6 +86,7 @@ export async function runAllowAdd(opts, deps) {
 }
 
 export async function runAllowRemove(opts, deps) {
+  if (deps.isBoundaryLocked?.()) throw new BoundaryLockedError('editing the allowlist');
   const { target } = opts;
 
   const profile = deps.resolveProfile(opts.profile);
