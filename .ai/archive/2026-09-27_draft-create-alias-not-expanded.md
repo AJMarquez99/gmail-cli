@@ -1,17 +1,19 @@
 # Note: `draft create` does not expand allowlist aliases → draft saved with no recipient
 
+> **Resolved in v1.0.0** (PR #18) — kept for history.
+
 **Captured:** 2026-06-26 · **Status:** RELEASE BLOCKER candidate for v1.0.0 · **Priority:** high
 
 ## Symptom
 
-`gmail draft create --to <alias> …` (where `<alias>` is an allowlist alias such as `personal`)
+`gmail draft create --to <alias> …` (where `<alias>` is an allowlist alias such as `alice`)
 saves a draft whose **`To:` header is empty**. The recipient is silently lost. The command's own
-JSON output even echoes the raw alias (`"to": ["personal"]`), so it *looks* like it worked — but the
+JSON output even echoes the raw alias (`"to": ["alice"]`), so it *looks* like it worked — but the
 MIME actually written to `[Gmail]/Drafts` has no parseable recipient.
 
 Reproduced during v1.0.0 staging testing:
-- `draft create --to <alias> …` → read the saved draft back → `to: []` (empty).
-- `draft create --to <full-email> …` → read back → `to: [<full-email>]` (intact).
+- `draft create --to alice …` → read the saved draft back → `to: []` (empty).
+- `draft create --to alice@example.com …` → read back → `to: [alice@example.com]` (intact).
 
 So it is **alias-specific**: literal email addresses survive; aliases do not.
 
@@ -38,7 +40,7 @@ const { message } = buildMessage({ to, cc, bcc }, opts, { profile, creds }, deps
 
 `toList()` only splits/normalizes comma-separated values — it does **not** expand aliases. Alias
 expansion lives in `resolveRecipients` (`src/transmit.js`), which `runDraftCreate` does not call. So
-the literal token `personal` is handed to the MIME builder; nodemailer cannot parse it as an address
+the literal token `alice` is handed to the MIME builder; nodemailer cannot parse it as an address
 and drops it → empty `To`.
 
 This is the **same bug class** as the PR-#16 forward/reply finding ("build the message from
@@ -89,4 +91,5 @@ create` and any future never-enforce caller can share. Either is fine; the shim 
 ## Related
 
 Same family as the deferred-but-different perf notes are not related; this is correctness. See the
-other open blocker [[imap-connection-timeout-hang]]. Both should clear before tagging `v1.0.0`.
+other open blocker [[2026-09-27_imap-connection-timeout-hang]]. Both should clear before tagging
+`v1.0.0`.

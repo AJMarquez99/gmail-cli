@@ -1,5 +1,7 @@
 # Note: `archive` is a silent no-op — Gmail hides the selected mailbox's own label
 
+> **Resolved in v1.0.0** (PR #18) — kept for history.
+
 **Captured:** 2026-09-26 · **Status:** root cause proven, fix verified on live mail, patch deferred
 · **Priority:** HIGH — never published; found on a source install of 1.0.0 before release
 
@@ -8,7 +10,7 @@
 Every archive path reports success and changes nothing:
 
 ```
-gmail rules apply --profile work
+gmail rules apply --profile team
   → archived: 1000 | errors: 0
 gmail read count --profile work
   → { "total": 2000 }     # unchanged. Not one message left INBOX.
@@ -108,7 +110,8 @@ tagging, with a plain changelog line, not a quiet fix.
 
 ## Related
 
-Third finding in the same family as [[config-set-double-prefixes-dotted-profile-keys]] — an
-operation is accepted, reported as successful, and silently does nothing. That note also records the
-`resolveProfile()` dropped-`imap` bug. A hardening pass over "we returned success, but did we verify
-it?" would catch all three; see also [[imap-connection-timeout-hang]].
+Third finding in the same family as
+[[2026-09-27_config-set-double-prefixes-dotted-profile-keys]] — an operation is accepted, reported
+as successful, and silently does nothing. That note also records the `resolveProfile()`
+dropped-`imap` bug. A hardening pass over "we returned success, but did we verify it?" would catch
+all three; see also [[2026-09-27_imap-connection-timeout-hang]].

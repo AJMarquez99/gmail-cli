@@ -1,8 +1,10 @@
 # Safety Specification — gmail-cli
 
-**Status:** authoritative safety standard for gmail-cli. **Audience:** anyone building, modifying, or
-forking gmail-cli, and the AI agents that operate it. Companion docs live in `.ai/guidelines/` and
-`.ai/knowledge/`.
+**Status:** the design rationale and threat model behind gmail-cli's safety posture. **`SECURITY.md`
+is normative for shipped behavior** (what the current release actually does and how to report an
+issue); this file is the "why," reviewed against it at each release. **Audience:** anyone building,
+modifying, or forking gmail-cli, and the AI agents that operate it. Companion docs live in
+`.ai/guidelines/` and `.ai/knowledge/`.
 
 Requirement keywords **MUST / MUST NOT / SHOULD / SHOULD NOT / MAY** are used in the RFC 2119 sense.
 Each requirement is tagged (e.g. `SEC-3`) so reviews can cite it.
@@ -135,7 +137,9 @@ A change that violates one is a security regression, not a feature.
 
 - **RD-1 (MUST)** Read paths (`gmail read`, `label`, `mark`) are **read-only with respect to content**
   and MUST NOT perform a send or other outbound effect as a result of message text (no auto-reply, no
-  auto-forward).
+  auto-forward). Mutating IMAP paths added since this spec was written — `organize` (`archive`,
+  `move`, `trash`, `delete`), `draft`/`reply`/`forward`, and `rules apply` — are held to the same
+  "act only on what the caller explicitly asked for" standard as `label`/`mark`; see §5.10.
 - **RD-2 (SHOULD)** Returned mail is plain data the caller MUST treat as **untrusted** — the tool does
   not pre-interpret it as instructions. Not executing instructions found in fetched mail is the
   agent/orchestrator's responsibility; the tool's job is to not amplify them.
@@ -156,8 +160,9 @@ A change that violates one is a security regression, not a feature.
 ### 5.6 Failure behavior & honesty — defends T6
 
 - **FAIL-1 (MUST)** Use the exit-code contract: `0` ok · `1` network/SMTP/unexpected · `2`
-  user-fixable config/input · `3` blocked by the allowlist. The code is part of the API an
-  orchestrator relies on to detect a block.
+  user-fixable config/input · `3` blocked by the allowlist or a locked boundary · `4` capability
+  denied (the profile's `read`/`organize`/`draft`/`send`/`delete` scope doesn't cover the command;
+  §5.10). The code is part of the API an orchestrator relies on to detect a block.
 - **FAIL-2 (MUST NOT)** Degrade to a less-safe mode on error. A missing/broken allowlist MUST fail
   closed (I1), never "allow all."
 - **FAIL-3 (MUST)** Report outcomes faithfully — no success claim without the send having occurred; a
@@ -195,6 +200,32 @@ A change that violates one is a security regression, not a feature.
 - **ID-3 (MUST)** Account/profile resolution is **unambiguous**: when the target profile is ambiguous,
   the tool errors rather than guessing. An agent must never silently act under the wrong account.
 
+### 5.10 Boundary extensions added after this spec was written — defends T2, T4
+
+Shipped in v1.0.0; SECURITY.md is the normative description, this is how each fits the model above.
+
+- **CAP-1 (SHOULD)** A profile MAY be scoped to a least-privilege subset of the `read`/`organize`/
+  `draft`/`send`/`delete` capability buckets (`capabilities: [...]` allow, or `deny: [...]`).
+  `enforceCapability()` (`src/capabilities.js`) is a single choke point called from **both** the CLI
+  (`handle()`) and the MCP server, so scoping applies identically to both front ends — same spirit
+  as BND-1/MCP-1. A denied command throws `CapabilityDeniedError` (exit `4`).
+- **CAP-2 (MUST)** A command path absent from `COMMAND_CAPABILITY` is **always-allowed**, not
+  always-denied — new commands must be added to the map deliberately (a coverage-guard test fails
+  otherwise). Treat an unmapped command as an open door, not a closed one, when scoping a profile.
+- **LOCK-1 (SHOULD)** `isBoundaryLocked()` (`src/lock.js`, `GMAIL_CLI_LOCKED=1` or
+  `config.locked: true`) refuses, at exit `3`, any CLI-reachable attempt to widen the boundary
+  itself — allowlist edits, the boundary-relevant `config set` keys, `login`, profile add/remove/caps
+  changes, and any send that tries to disable enforcement. It is a stronger, opt-in version of BND-3
+  for operators who want the boundary un-editable for the duration of an agent session. Like every
+  CLI-side control, it governs only the CLI process — it cannot stop an actor with control of the
+  environment or config directory (same limit as SEC-1..3; see SECURITY.md).
+- **ATT-1 (MUST)** Attachments resolve against a configured `attachRoot` (default: cwd); a path that
+  resolves outside it — lexically or after following symlinks — is refused. This is ACT-4's "no file
+  the caller didn't ask for" applied to the filesystem side of a send.
+- **ACT-5 (MUST)** `maxRecipients` (default `10`) caps a single send's combined `to`+`cc`+`bcc` count,
+  checked before allowlist resolution — reinforces ACT-3 (bounded, visible blast radius) with a hard
+  ceiling instead of just a report.
+
 ## 6. Conformance checklist
 
 Use at review time; cite the requirement IDs.
@@ -212,6 +243,11 @@ Use at review time; cite the requirement IDs.
 - [ ] **MCP (if present):** delegates to gated commands (MCP-1); exposes **no** boundary-write /
       secret-write / bypass surface (MCP-2, MCP-3); blocks return structured errors (MCP-4)
 - [ ] Dedicated, least-privilege account; unambiguous profile resolution (ID-1..3)
+- [ ] Capability scoping enforced identically on CLI and MCP; unmapped command path treated as
+      always-allowed, not a gap to rely on (CAP-1, CAP-2)
+- [ ] Locked boundary mode refuses boundary-widening actions at exit 3, with its CLI-only limit
+      documented (LOCK-1)
+- [ ] Attachments confined to `attachRoot`; `maxRecipients` caps a single send (ATT-1, ACT-5)
 
 ## 7. Residual risks & the owner's responsibilities (non-goals)
 
