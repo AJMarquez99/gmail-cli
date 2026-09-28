@@ -35,6 +35,9 @@ function assertNotFsRoot(resolved) {
   }
 }
 
+const tooBig = (total) =>
+  new InvalidInputError(`Attachments total ${(total / 1048576).toFixed(1)}MB exceeds Gmail's 25MB limit.`);
+
 export function buildAttachments(paths, deps, { root } = {}) {
   const base = resolvePath(root || deps.cwd());
   assertNotFsRoot(base);
@@ -66,13 +69,13 @@ export function buildAttachments(paths, deps, { root } = {}) {
     let stat;
     try { stat = deps.statFile(real); } catch { throw new InvalidInputError(`Attachment not found: ${abs}`); }
     if (!stat.isFile()) throw new InvalidInputError(`Attachment is not a file: ${abs}`);
+    // Check the running total BEFORE reading, so an oversized file is never pulled into memory.
+    if (total + stat.size > GMAIL_MAX_BYTES) throw tooBig(total + stat.size);
     const content = deps.readFileBytes(real);
     total += stat.size;
     out.push({ filename: basename(abs), content, bytes: stat.size });
   }
-  if (total > GMAIL_MAX_BYTES) {
-    throw new InvalidInputError(`Attachments total ${(total / 1048576).toFixed(1)}MB exceeds Gmail's 25MB limit.`);
-  }
+  if (total > GMAIL_MAX_BYTES) throw tooBig(total);
   if (total > WARN_BYTES) {
     process.stderr.write(`warn: attachments total ${(total / 1048576).toFixed(1)}MB — near Gmail's 25MB limit.\n`);
   }
@@ -85,6 +88,15 @@ function assertNoCRLF(value, field) {
   const s = String(value);
   if (/[\r\n]/.test(s)) throw new InvalidInputError(`${field} must not contain CR or LF characters.`);
   return s;
+}
+
+/**
+ * Render a message `from` (a bare address or a `{ name, address }` object) as a display string for
+ * results and the send log. Reporting only — the message itself keeps the structured form.
+ */
+export function formatFrom(from) {
+  if (!from || typeof from === 'string') return from;
+  return `"${String(from.name).replace(/["\\]/g, '\\$&')}" <${from.address}>`;
 }
 
 /**
@@ -117,7 +129,9 @@ export function buildMessage({ to, cc, bcc }, opts, { profile, creds }, deps) {
   const refs = toList(opts.references);
 
   const message = {
-    from: fromName ? `"${fromName}" <${creds.user}>` : creds.user,
+    // Structured address: nodemailer quotes/encodes the display name, so a `"` in it can't break
+    // the From header the way string interpolation would.
+    from: fromName ? { name: fromName, address: creds.user } : creds.user,
     to, cc, bcc,
     subject: opts.subject || '',
   };

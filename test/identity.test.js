@@ -36,7 +36,7 @@ describe('identity & threading', () => {
     const d = deps({ config: { fromName: 'Example Co' } });
     await send({}, d);
     expect(d._transporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: '"Example Co" <you@example.com>' }),
+      expect.objectContaining({ from: { name: 'Example Co', address: 'you@example.com' } }),
     );
   });
 

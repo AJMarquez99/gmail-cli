@@ -256,7 +256,7 @@ describe('runSend — profile mode', () => {
     const deps = makeDeps({ config });
     await runSend({ to: 'x@y.com', subject: 'S', body: 'b' }, deps);
     expect(deps._transporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: '"Work Account" <you@example.com>' }),
+      expect.objectContaining({ from: { name: 'Work Account', address: 'you@example.com' } }),
     );
   });
 
@@ -290,7 +290,7 @@ describe('runSend — profile mode', () => {
     const deps = makeDeps({ config });
     await runSend({ to: 'x@y.com', subject: 'S', body: 'b', profile: 'personal' }, deps);
     expect(deps._transporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: '"Personal Me" <you@example.com>' }),
+      expect.objectContaining({ from: { name: 'Personal Me', address: 'you@example.com' } }),
     );
   });
 });
@@ -327,7 +327,7 @@ describe('CLI --profile global flag', () => {
       spy.mockRestore();
     }
     expect(transporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: '"Work Me" <you@example.com>' }),
+      expect.objectContaining({ from: { name: 'Work Me', address: 'you@example.com' } }),
     );
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildMessage, buildRawMime } from '../src/compose.js';
+import { buildMessage, buildRawMime, formatFrom } from '../src/compose.js';
 import { simpleParser } from 'mailparser';
 
 const ctx = { profile: { fromName: null, replyTo: null, signature: null }, creds: { user: 'me@x.com' } };
@@ -18,7 +18,14 @@ describe('buildMessage', () => {
   it('applies fromName when set', () => {
     const { message: m } = buildMessage({ to: ['a@x.com'], cc: [], bcc: [] }, { subject: '', body: 'x' },
       { ...ctx, profile: { ...ctx.profile, fromName: 'Me' } }, deps);
-    expect(m.from).toBe('"Me" <me@x.com>');
+    expect(m.from).toEqual({ name: 'Me', address: 'me@x.com' });
+  });
+  it('passes the display name as a structured address so a quote cannot break the From header', async () => {
+    const { message: m } = buildMessage({ to: ['a@x.com'], cc: [], bcc: [] }, { subject: '', body: 'x' },
+      { ...ctx, profile: { ...ctx.profile, fromName: 'Ann "Q" Lee' } }, deps);
+    expect(m.from).toEqual({ name: 'Ann "Q" Lee', address: 'me@x.com' });
+    const parsed = await simpleParser(await buildRawMime(m));
+    expect(parsed.from.value).toEqual([{ name: 'Ann "Q" Lee', address: 'me@x.com' }]);
   });
   it('threads via inReplyTo → sets references', () => {
     const { message: m } = buildMessage({ to: ['a@x.com'], cc: [], bcc: [] },
@@ -72,4 +79,10 @@ it('buildRawMime disables file/URL access even if a caller sneaks a path/href at
     { subject: 'Hi', body: 'Hello' }, ctx, deps);
   message.attachments = [{ filename: 'x', path: '/etc/hosts' }];
   await expect(buildRawMime(message)).rejects.toThrow(/File access rejected/);
+});
+
+it('formatFrom renders a structured From for results/log, escaping quotes in the name', () => {
+  expect(formatFrom('me@x.com')).toBe('me@x.com');
+  expect(formatFrom({ name: 'Me', address: 'me@x.com' })).toBe('"Me" <me@x.com>');
+  expect(formatFrom({ name: 'Ann "Q" Lee', address: 'me@x.com' })).toBe('"Ann \\"Q\\" Lee" <me@x.com>');
 });

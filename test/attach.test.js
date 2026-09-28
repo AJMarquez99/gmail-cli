@@ -55,6 +55,23 @@ describe('attachments', () => {
       .rejects.toThrow(/25\s?MB|limit/i);
   });
 
+  it('checks the running size total before reading a file (never reads the one that would exceed 25MB)', async () => {
+    const sizes = { '/work/a.zip': 20 * 1024 * 1024, '/work/b.zip': 10 * 1024 * 1024 };
+    const stat = vi.fn((p) => ({ isFile: () => true, size: sizes[p] }));
+    const d = deps({ stat });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['a.zip', 'b.zip'] }, d))
+      .rejects.toThrow(/25\s?MB|limit/i);
+    expect(d.readFileBytes).toHaveBeenCalledTimes(1);
+    expect(d.readFileBytes).toHaveBeenCalledWith('/work/a.zip');
+  });
+
+  it('never reads a single attachment that alone exceeds 25MB', async () => {
+    const stat = vi.fn(() => ({ isFile: () => true, size: 26 * 1024 * 1024 }));
+    const d = deps({ stat });
+    await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['big.zip'] }, d)).rejects.toThrow(InvalidInputError);
+    expect(d.readFileBytes).not.toHaveBeenCalled();
+  });
+
   it('refuses every attachment when the effective root is the filesystem root (e.g. an MCP server spawned at cwd /)', async () => {
     const d = deps({ cwd: () => '/' });
     await expect(runSend({ to: 'x@y.com', body: 'b', attach: ['quote.pdf'] }, d))
