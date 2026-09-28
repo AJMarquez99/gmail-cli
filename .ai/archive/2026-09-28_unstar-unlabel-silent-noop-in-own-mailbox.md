@@ -1,5 +1,7 @@
 # Note: removing a label from inside that label's own mailbox is a silent no-op
 
+> **Resolved in v1.0.0** (PR #18) — kept for history.
+
 **Captured:** 2026-09-28 · **Status:** reproduced on live mail during v1.0.0 verification · **Priority:** high
 
 ## Symptom
@@ -33,5 +35,3 @@ mailbox*: MOVE the UIDs to `[Gmail]/All Mail` (reuse the verified-move helper in
 which drops exactly that label and keeps the others. For `\Starred`, removing the IMAP `\Flagged`
 system flag (no `useLabels`) is an alternative that works from any mailbox. Add a regression test
 that no writer STOREs `-<label>` while `<label>` is the selected mailbox.
-
-Relates to [[reply-no-quote-header-only-fetch]], [[rules-engine-mailboxopen-dedup]].
