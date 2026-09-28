@@ -1,5 +1,5 @@
 import { makeAllowChecker } from './allowlist.js';
-import { RecipientNotAllowedError, InvalidInputError, BoundaryLockedError } from './lib/errors.js';
+import { RecipientNotAllowedError, InvalidInputError, BoundaryLockedError, TooManyRecipientsError } from './lib/errors.js';
 
 const ENFORCE_OFF_WARNING =
   'warn: allowlist enforcement disabled — sending to any recipient (re-enable via config allowlist.enforce or drop --no-allowlist).\n';
@@ -8,9 +8,17 @@ const ENFORCE_OFF_WARNING =
  * Resolve to/cc/bcc against the profile allowlist. Returns resolved arrays + the collected
  * denials + the enforce flag. Does NOT throw on denials (callers gate; send supports dry-run
  * reporting) — but DOES throw BoundaryLockedError when enforcement would be off (a
- * --no-allowlist bypass or config allowlist.enforce:false) while the boundary is locked.
+ * --no-allowlist bypass or config allowlist.enforce:false) while the boundary is locked, and
+ * DOES throw TooManyRecipientsError up front when to+cc+bcc exceeds profile.maxRecipients
+ * (default 10) — a hard blast-radius cap that applies unconditionally (even dry-run, even with
+ * the allowlist bypassed), since it bounds fan-out rather than policing which addresses.
  */
 export function resolveRecipients(lists, opts, { profile, creds }, deps) {
+  const { to = [], cc = [], bcc = [] } = lists;
+  const total = to.length + cc.length + bcc.length;
+  const max = profile.maxRecipients != null ? profile.maxRecipients : 10;
+  if (total > max) throw new TooManyRecipientsError(total, max);
+
   const enforce = !(opts.noAllowlist || opts.allowlist === false) && profile.allowlistEnforce;
   if (!enforce && deps.isBoundaryLocked?.()) {
     throw new BoundaryLockedError('the recipient allowlist bypass');

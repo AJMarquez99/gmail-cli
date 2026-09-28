@@ -82,7 +82,7 @@ describe('locked boundary refuses agent-reachable widening', () => {
     await expect(runConfigUnset({ key: 'profiles.work.allowlist' }, deps)).rejects.toBeInstanceOf(BoundaryLockedError);
     expect(deps.writeFile).not.toHaveBeenCalled();
   });
-  it.each(['allowlist', 'allowlistPath', 'credentialsPath', 'attachRoot', 'locked', 'capabilities', 'deny', 'profiles'])(
+  it.each(['allowlist', 'allowlistPath', 'credentialsPath', 'attachRoot', 'maxRecipients', 'locked', 'capabilities', 'deny', 'profiles'])(
     'config set/unset of boundary key %s refuses when locked',
     async (key) => {
       const deps = cfgDeps();

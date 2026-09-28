@@ -11,6 +11,7 @@ const KNOWN_KEYS = new Set([
   'sendLog.enabled',
   'sendLog.logBody',
   'allowlist.enforce',
+  'maxRecipients',
   'locked',
   'defaultProfile',
   'attachRoot',
@@ -60,14 +61,15 @@ function keyPath(profile, key, config) {
 const bareKey = (key) => (key.startsWith('profiles.') ? key.split('.').slice(2).join('.') : key);
 
 // Top-level settings that define the boundary: the allowlist (enforcement + which file), the
-// credentials file, the attachment root, capability scope, profile topology, and the lock itself.
-// Matched on the FIRST segment of the bare key, so `allowlist.enforce` and a fully-qualified
-// `profiles.<name>.allowlist.enforce` are both covered.
+// credentials file, the attachment root, the fan-out cap, capability scope, profile topology,
+// and the lock itself. Matched on the FIRST segment of the bare key, so `allowlist.enforce` and
+// a fully-qualified `profiles.<name>.allowlist.enforce` are both covered.
 const BOUNDARY_KEYS = new Set([
   'allowlist',
   'allowlistPath',
   'credentialsPath',
   'attachRoot',
+  'maxRecipients',
   'capabilities',
   'deny',
   'locked',

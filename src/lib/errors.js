@@ -86,3 +86,15 @@ export class CapabilityDeniedError extends GmailError {
     this.profileName = profileName;
   }
 }
+
+export class TooManyRecipientsError extends GmailError {
+  constructor(count, max) {
+    super(
+      `Too many recipients: ${count} exceeds the per-send maximum of ${max}.\n` +
+        `Raise it with \`gmail config set maxRecipients <n>\` (a human action) or split the send.`,
+      EXIT_CODES.CONFIG,
+    );
+    this.count = count;
+    this.max = max;
+  }
+}

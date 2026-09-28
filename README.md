@@ -220,6 +220,7 @@ the single-account setup works exactly as before — profiles are purely opt-in.
 | Identity (fromName, replyTo, signature) | top-level config keys | `profiles.<name>.*` |
 | Allowlist enforcement | `allowlist.enforce` | `profiles.<name>.allowlist.enforce` |
 | Attachment root | `attachRoot` (default: current directory) | `profiles.<name>.attachRoot` |
+| Fan-out cap | `maxRecipients` (default: `10`) | `profiles.<name>.maxRecipients` |
 
 File paths and settings can be set for any profile with a fully-qualified key
 (`gmail config set profiles.work.credentialsPath ~/secrets/work-creds.json`) or a bare key plus
@@ -351,8 +352,8 @@ While locked, these all refuse with **exit `3`** (nothing is written or sent):
 - `gmail allow add` / `gmail allow remove`
 - `gmail login`
 - `gmail config set|unset` of a boundary key — `allowlist.*`, `allowlistPath`, `credentialsPath`,
-  `attachRoot`, `capabilities`, `deny`, `profiles`, and `locked` itself (also when written as a
-  fully-qualified `profiles.<name>.<key>`)
+  `attachRoot`, `maxRecipients`, `capabilities`, `deny`, `profiles`, and `locked` itself (also when
+  written as a fully-qualified `profiles.<name>.<key>`)
 - `gmail profile add` / `gmail profile remove` / `gmail profile caps --allow|--deny`
 - any send with enforcement off: `--no-allowlist`, or a profile whose `allowlist.enforce` is `false`
 
@@ -742,6 +743,7 @@ never written to logs, and never passed as a CLI flag. It flows directly from th
 | `sendLog.logBody` | `true` includes body text in every log entry | `--log-body` (per-send) |
 | `allowlist.enforce` | `false` disables allowlist enforcement globally (default: `true`) | `--no-allowlist` (per-send) |
 | `attachRoot` | Directory `--attach` paths are confined to (default: the current directory); `~` expands to `$HOME`. Refused outright if it resolves to the filesystem root. | none — set per-send paths relative to it instead |
+| `maxRecipients` | Hard cap on to+cc+bcc combined for a single transmission (default: `10`); refused with exit `2` if exceeded. Enforced centrally, so it covers `send`, `reply`, `forward`, and `draft send` alike. | none — split the send, or raise the cap |
 
 ## `gmail send` options reference
 
@@ -787,7 +789,8 @@ win over config values.
   "allowlist": {
     "enforce": true
   },
-  "attachRoot": "~/docs"
+  "attachRoot": "~/docs",
+  "maxRecipients": 10
 }
 ```
 
@@ -836,6 +839,9 @@ gmail log --limit 5 # show last 5
   <https://myaccount.google.com/apppasswords>.
 - Outbound recipients are constrained by the fail-closed allowlist (see above), so the blast
   radius of a misused App Password is limited to addresses you've explicitly approved.
+- A per-send fan-out cap (`config.maxRecipients`, default 10) further bounds blast radius: any
+  single transmission (send, reply, forward, or draft send) with more than the cap combined
+  across to/cc/bcc is refused outright with exit `2`, before the allowlist is even consulted.
 
 ## MCP server
 
