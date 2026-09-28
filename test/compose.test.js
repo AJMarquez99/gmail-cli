@@ -48,3 +48,10 @@ it('buildRawMime produces parseable RFC822', async () => {
   expect(parsed.subject).toBe('Hi');
   expect(parsed.to.text).toContain('a@x.com');
 });
+
+it('buildRawMime disables file/URL access even if a caller sneaks a path/href attachment in (defense in depth)', async () => {
+  const { message } = buildMessage({ to: ['a@x.com'], cc: [], bcc: [] },
+    { subject: 'Hi', body: 'Hello' }, ctx, deps);
+  message.attachments = [{ filename: 'x', path: '/etc/hosts' }];
+  await expect(buildRawMime(message)).rejects.toThrow(/File access rejected/);
+});

@@ -6,9 +6,14 @@ import { renderMarkdown } from './lib/markdown.js';
 const GMAIL_MAX_BYTES = 25 * 1024 * 1024;
 const WARN_BYTES = 20 * 1024 * 1024;
 
-/** Compile a nodemailer message object into a raw RFC822 Buffer (for IMAP APPEND). */
+/**
+ * Compile a nodemailer message object into a raw RFC822 Buffer (for IMAP APPEND).
+ * Built directly from MailComposer (not through the SMTP transport), so it doesn't inherit
+ * the transport's disableFileAccess/disableUrlAccess — force them here too, as defense in
+ * depth against any attachment that isn't an in-process buffer (path/href content).
+ */
 export function buildRawMime(message) {
-  return new MailComposer(message).compile().build();
+  return new MailComposer({ ...message, disableFileAccess: true, disableUrlAccess: true }).compile().build();
 }
 
 export function toList(value) {
