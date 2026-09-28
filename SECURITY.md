@@ -12,10 +12,10 @@ Please **do not** open a public issue for a vulnerability.
 Instead, use GitHub's private reporting:
 
 1. Go to the repository's **Security** tab.
-2. Click **Report a vulnerability** to open a private advisory.
+2. Click **Report a vulnerability** to open a private advisory
+   (https://github.com/AJMarquez99/gmail-cli/security/advisories/new).
 
-If you'd rather email, write to **alejandromarquez@live.com** with details and steps to
-reproduce. We'll acknowledge within a few days and keep you updated on the fix.
+We'll acknowledge within a few days and keep you updated on the fix.
 
 ## Threat model
 
