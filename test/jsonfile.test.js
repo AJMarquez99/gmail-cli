@@ -1,9 +1,20 @@
-import { describe, it, expect, vi } from 'vitest';
-import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readJson, writeJson, getPath, setPath, unsetPath, coerce } from '../src/lib/jsonfile.js';
 import { MalformedConfigError } from '../src/lib/errors.js';
+
+// Track every temp dir so afterEach removes it — tests must not leak dirs into the OS tmpdir.
+const tmpDirs = [];
+const makeTmpDir = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gmail-cli-jsonfile-'));
+  tmpDirs.push(dir);
+  return dir;
+};
+afterEach(() => {
+  while (tmpDirs.length) rmSync(tmpDirs.pop(), { recursive: true, force: true });
+});
 
 describe('readJson', () => {
   it('parses an existing file', () => {
@@ -64,7 +75,7 @@ describe('writeJson', () => {
   it('uses the default writeFile against a real file without throwing on a bare numeric mode', () => {
     // Regression: fs.writeFileSync rejects a bare number as its 3rd (options) argument
     // (ERR_INVALID_ARG_TYPE) — the default writeFile must wrap it as { mode }.
-    const dir = mkdtempSync(join(tmpdir(), 'gmail-cli-jsonfile-'));
+    const dir = makeTmpDir();
     const path = join(dir, 'f.json');
     expect(() => writeJson(path, { a: 1 }, { mode: 0o600 })).not.toThrow();
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ a: 1 });
