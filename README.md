@@ -151,6 +151,7 @@ gmail label add 1234 Work
 gmail label remove 1234 Work
 # label add/remove default to INBOX; override with --mailbox if the message is elsewhere
 gmail label add 1234 Archived --mailbox "[Gmail]/All Mail"
+# removing a label from within that label's own mailbox (e.g. --mailbox Work) moves the message to All Mail
 
 # Mark a message as read or unread
 gmail mark 1234 --read
@@ -564,6 +565,7 @@ gmail move 17 "Saved"
 # Star / important toggles (alongside --read/--unread)
 gmail mark 17 --star          # or --unstar
 gmail mark 17 --important     # or --unimportant
+# --unstar in "[Gmail]/Starred" / --unimportant in "[Gmail]/Important" moves the message to All Mail
 
 # Label taxonomy management
 gmail label create "Outreach/Acme"

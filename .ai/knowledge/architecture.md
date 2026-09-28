@@ -133,7 +133,14 @@ this shipped with before the v1.0.0 hardening pass. The MOVE-based writers — `
 (`moveVerified`): `false` → `GmailError` (exit 1); no/empty `uidMap` (nothing moved) →
 `InvalidInputError` (exit 2) naming the verb, uid and mailbox; a `uidMap` smaller than the
 de-duplicated requested UIDs → `GmailError` (partial move). So a rule with `archive` then `trash`
-records the trash as an error instead of reporting it applied. The flag/label writers (`addLabel`,
+records the trash as an error instead of reporting it applied. The same trap covers **every label
+removal from that label's own mailbox**: `removeLabel` with `label === mailbox`, and
+`starMessage`/`importantMessage` with `on: false` while `[Gmail]/Starred` / `[Gmail]/Important` is
+selected, all go through `dropLabel`, which does a `moveVerified` MOVE to All Mail (dropping exactly
+that label) instead of a `-X-GM-LABELS` STORE. The system-label→mailbox map (`SYSTEM_LABEL_MAILBOX`)
+sits beside `ALL_MAIL`/`TRASH`; any other label's mailbox is its own name. Never STORE `-<label>`
+while `<label>`'s mailbox is selected (a regression test in `test/writer.test.js` guards this). Adding
+a label, and `\Seen` (a real IMAP flag), are unaffected. The flag/label writers (`addLabel`,
 `removeLabel`, `markMessage`, `starMessage`, `importantMessage`) do **not** yet verify a server
 result — imapflow's STORE gives no per-UID confirmation to check — so treat their success as
 "command accepted", not "state confirmed". A new MOVE-style writer must go through `moveVerified`.

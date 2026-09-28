@@ -66,6 +66,11 @@ still App-Password-only (no OAuth), JSON-by-default, and fail-closed.
   both `archive` and `trash` previously reported the message "trashed" while it actually sat in All
   Mail (archive had already moved it out of INBOX, so the trash matched nothing); that trash action
   now lands in the rule's errors instead.
+- **Removing a label from inside that label's own mailbox was a silent no-op** (same Gmail trap as
+  archive): `gmail mark --unstar` in `[Gmail]/Starred`, `--unimportant` in `[Gmail]/Important`,
+  `gmail label remove <uid> <L> --mailbox <L>`, and a rule `unlabel:<L>` whose mailbox is `<L>` all
+  reported success and changed nothing. These now `MOVE` the message to `[Gmail]/All Mail` (dropping
+  exactly that label, keeping the others) with the same verification as `archive`.
 - **IMAP connections could hang indefinitely.** `doctor`, `draft send`, and every `read`/`label`/
   `mark`/`organize` command now route through one connect helper that races each attempt against a
   connect/greeting/socket deadline and retries once on a stalled connection before failing, instead of
