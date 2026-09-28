@@ -1,4 +1,4 @@
-import { GmailError } from './lib/errors.js';
+import { GmailError, InvalidInputError } from './lib/errors.js';
 
 export const DRAFTS = '[Gmail]/Drafts';
 
@@ -84,15 +84,30 @@ export const ALL_MAIL = '[Gmail]/All Mail';
 /**
  * Archive: MOVE to All Mail. Removing \Inbox via X-GM-LABELS is a silent no-op while INBOX is
  * selected (Gmail hides the selected mailbox's own label), so MOVE is the only reliable idiom.
- * Throws when the server reports it moved nothing / fewer messages than requested.
+ *
+ * Verifies the server actually moved the message(s):
+ *  - `messageMove` returning `false` means the command itself errored (e.g. bad destination) —
+ *    not a Gmail no-op — so that's a generic failure.
+ *  - Gmail is UIDPLUS and always returns COPYUID on a successful move, so a resolved result with
+ *    no `uidMap` (or an empty one) means 0 messages actually matched in `mailbox` — most likely
+ *    the uid is already archived or never existed there. That's a user-fixable input error, not a
+ *    server/network failure.
+ *  - A `uidMap` covering fewer than the requested (de-duplicated) uids means a partial move.
  */
 export async function archiveMessage(client, { uid, mailbox = 'INBOX' } = {}) {
   await client.mailboxOpen(mailbox);
-  const res = await client.messageMove(toRange(uid), ALL_MAIL, { uid: true });
-  const want = Array.isArray(uid) ? uid.length : 1;
-  if (res === false) throw new GmailError(`archive failed: uid ${toRange(uid)} not found in ${mailbox}`);
-  if (res?.uidMap && res.uidMap.size < want) {
-    throw new GmailError(`archive incomplete: moved ${res.uidMap.size} of ${want} from ${mailbox}`);
+  const range = toRange(uid);
+  const res = await client.messageMove(range, ALL_MAIL, { uid: true });
+  if (res === false) {
+    throw new GmailError(`archive failed: server rejected MOVE of uid ${range} from ${mailbox}`);
+  }
+  const want = Array.isArray(uid) ? new Set(uid.map(Number)).size : 1;
+  const moved = res?.uidMap?.size ?? 0;
+  if (moved === 0) {
+    throw new InvalidInputError(`No message with uid ${range} in ${mailbox} (already archived?)`);
+  }
+  if (moved < want) {
+    throw new GmailError(`archive incomplete: moved ${moved} of ${want} from ${mailbox}`);
   }
   return { uid: toUid(uid), mailbox, action: 'archived' };
 }

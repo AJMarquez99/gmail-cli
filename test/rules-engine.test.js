@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { applyRules } from '../src/rules/engine.js';
 
+// Build a realistic imapflow UIDPLUS uidMap covering every uid in a comma-joined range/number.
+const uidMapFor = (u) => new Map(String(u).split(',').map(Number).map((n) => [n, n + 900]));
+
 // Recording client: search returns a fixed uid list; mutations are recorded.
 // uid arg may be a scalar number or a comma-joined range string like '5,6,7'.
 const mkClient = (uids) => {
@@ -10,7 +13,10 @@ const mkClient = (uids) => {
     search: async (q, o) => { calls.push(['search', q, o]); return uids; },
     messageFlagsAdd: async (u, f, o) => calls.push(['add', u, f, o]),
     messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
-    messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
+    messageMove: async (u, d, o) => {
+      calls.push(['move', u, d, o]);
+      return { uidMap: uidMapFor(u) };
+    },
   };
 };
 const allow = () => true;
@@ -116,7 +122,10 @@ describe('applyRules', () => {
       search: async (q, o) => { calls.push(['search', q, o]); return [5, 6]; },
       messageFlagsAdd: async (u, f, o) => { calls.push(['add', u, f, o]); throw new Error('IMAP failure'); },
       messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
-      messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
+      messageMove: async (u, d, o) => {
+        calls.push(['move', u, d, o]);
+        return { uidMap: uidMapFor(u) };
+      },
     };
     const rules = [{ id: 'r1', match: 'from:x', actions: ['label:Promo', 'archive'], mailbox: 'INBOX' }];
     const rep = await applyRules(errClient, rules, { profileCan: allow }, {});

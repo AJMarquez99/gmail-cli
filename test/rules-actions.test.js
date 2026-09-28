@@ -40,7 +40,10 @@ describe('runAction dispatches to the right writer op', () => {
       mailboxOpen: async (m) => calls.push(['open', m]),
       messageFlagsAdd: async (u, f, o) => calls.push(['add', Number(u), f, o]),
       messageFlagsRemove: async (u, f, o) => calls.push(['remove', Number(u), f, o]),
-      messageMove: async (u, d, o) => calls.push(['move', Number(u), d, o]),
+      messageMove: async (u, d, o) => {
+        calls.push(['move', Number(u), d, o]);
+        return { uidMap: new Map([[Number(u), Number(u) + 900]]) };
+      },
     };
   };
   it('label → addLabel (X-GM-LABELS add)', async () => {

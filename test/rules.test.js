@@ -64,6 +64,9 @@ describe('rules list / remove / export-xml', () => {
   });
 });
 
+// Build a realistic imapflow UIDPLUS uidMap covering every uid in a comma-joined range/number.
+const uidMapFor = (u) => new Map(String(u).split(',').map(Number).map((n) => [n, n + 900]));
+
 // Recording IMAP client whose search returns a fixed uid set.
 const mkClient = (uids) => {
   const calls = [];
@@ -73,7 +76,10 @@ const mkClient = (uids) => {
     mailboxOpen: async (m) => calls.push(['open', m]),
     search: async (q, o) => { calls.push(['search', q, o]); return uids; },
     messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
-    messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
+    messageMove: async (u, d, o) => {
+      calls.push(['move', u, d, o]);
+      return { uidMap: uidMapFor(u) };
+    },
   };
 };
 

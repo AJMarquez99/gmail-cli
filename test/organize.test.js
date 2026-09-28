@@ -44,6 +44,7 @@ function makeDeps({ throwInOp = false } = {}) {
     async messageMove(uid, destination, opts) {
       if (throwInOp) throw new Error('messageMove exploded');
       this._messageMoves.push({ uid, destination, opts });
+      return { uidMap: new Map(String(uid).split(',').map(Number).map((n) => [n, n + 900])) };
     },
 
     async messageDelete(uid, opts) {

@@ -246,6 +246,10 @@ describe('fetchRawMessage', () => {
 
 import { archiveMessage, moveMessage, trashMessage, starMessage, importantMessage,
   createLabel, deleteLabel, renameLabel, TRASH, ALL_MAIL } from '../src/writer.js';
+import { GmailError, InvalidInputError } from '../src/lib/errors.js';
+
+// Build a realistic imapflow UIDPLUS uidMap covering every uid in a comma-joined range/number.
+const uidMapFor = (u) => new Map(String(u).split(',').map(Number).map((n) => [n, n + 900]));
 
 const mkClient = () => {
   const calls = [];
@@ -253,7 +257,10 @@ const mkClient = () => {
     mailboxOpen: async (m) => calls.push(['open', m]),
     messageFlagsAdd: async (u, f, o) => calls.push(['add', Number(u), f, o]),
     messageFlagsRemove: async (u, f, o) => calls.push(['remove', Number(u), f, o]),
-    messageMove: async (u, d, o) => calls.push(['move', Number(u), d, o]),
+    messageMove: async (u, d, o) => {
+      calls.push(['move', Number(u), d, o]);
+      return { uidMap: uidMapFor(u) };
+    },
     mailboxCreate: async (p) => calls.push(['create', p]),
     mailboxDelete: async (p) => calls.push(['delete', p]),
     mailboxRename: async (a, b) => calls.push(['rename', a, b]),
@@ -267,9 +274,23 @@ it('archiveMessage MOVEs to All Mail and never STOREs -\\Inbox', async () => {
   expect(c.calls.some((x) => x[0] === 'remove')).toBe(false);
   expect(r).toEqual({ uid: 7, mailbox: 'INBOX', action: 'archived' });
 });
-it('archiveMessage throws when the server moved nothing (uid not in mailbox)', async () => {
+it('archiveMessage throws GmailError (exit 1) when messageMove returns false (server rejected the command)', async () => {
   const c = { mailboxOpen: async () => {}, messageMove: async () => false };
-  await expect(archiveMessage(c, { uid: 7 })).rejects.toThrow(/archive.*7/i);
+  const err = await archiveMessage(c, { uid: 7 }).catch((e) => e);
+  expect(err).toBeInstanceOf(GmailError);
+  expect(err).not.toBeInstanceOf(InvalidInputError);
+  expect(err.exitCode).toBe(1);
+  expect(err.message).not.toMatch(/not found/i);
+  expect(err.message).toMatch(/archive failed/i);
+});
+it('archiveMessage throws InvalidInputError (exit 2) when the resolved result has no uidMap (uid not in mailbox)', async () => {
+  // imapflow 1.4.x + Gmail: a MOVE of a uid not present in the mailbox resolves { path, destination }
+  // with no COPYUID/uidMap — it does not return `false`. Gmail is UIDPLUS, so a missing uidMap means 0 moved.
+  const c = { mailboxOpen: async () => {}, messageMove: async () => ({ path: 'INBOX', destination: ALL_MAIL }) };
+  const err = await archiveMessage(c, { uid: 7 }).catch((e) => e);
+  expect(err).toBeInstanceOf(InvalidInputError);
+  expect(err.exitCode).toBe(2);
+  expect(err.message).toMatch(/No message with uid 7 in INBOX \(already archived\?\)/);
 });
 it('archiveMessage throws when uidMap covers fewer uids than requested', async () => {
   const c = { mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900]]) }) };
@@ -279,11 +300,9 @@ it('archiveMessage accepts a full uidMap', async () => {
   const c = { mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900], [6, 901]]) }) };
   await expect(archiveMessage(c, { uid: [5, 6] })).resolves.toMatchObject({ action: 'archived' });
 });
-// Regression guard for the general trap: no writer may remove a system label equal to the selected mailbox.
-it('no organize writer STOREs -\\Inbox while INBOX is selected', async () => {
-  const c = mkClient();
-  await archiveMessage(c, { uid: 1, mailbox: 'INBOX' });
-  expect(c.calls).not.toContainEqual(expect.arrayContaining(['remove', 1, ['\\Inbox']]));
+it('archiveMessage de-duplicates requested uids before comparing to the uidMap ([5,5] with 1 moved succeeds)', async () => {
+  const c = { mailboxOpen: async () => {}, messageMove: async () => ({ uidMap: new Map([[5, 900]]) }) };
+  await expect(archiveMessage(c, { uid: [5, 5] })).resolves.toMatchObject({ action: 'archived' });
 });
 it('moveMessage moves a uid to a destination mailbox', async () => {
   const c = mkClient();
@@ -330,7 +349,10 @@ const mkBatchClient = () => {
     mailboxOpen: async (m) => calls.push(['open', m]),
     messageFlagsAdd: async (u, f, o) => calls.push(['add', u, f, o]),
     messageFlagsRemove: async (u, f, o) => calls.push(['remove', u, f, o]),
-    messageMove: async (u, d, o) => calls.push(['move', u, d, o]),
+    messageMove: async (u, d, o) => {
+      calls.push(['move', u, d, o]);
+      return { uidMap: uidMapFor(u) };
+    },
   };
 };
 
