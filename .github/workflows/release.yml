@@ -37,5 +37,5 @@ jobs:
       - run: npm install -g npm@latest   # ensure npm >= 11.5.1 (OIDC support)
       - run: npm ci
       - run: npm run test:run
-      - run: npm audit --audit-level=high
+      - run: npm audit --omit=dev --audit-level=moderate
       - run: npm publish --access public  # provenance auto-generated (public repo + public package)
