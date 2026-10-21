@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-21
+
+Security patch release. No behavior changes.
+
+### Security
+- Upgraded `@modelcontextprotocol/sdk` 1.30.1 → 1.32.1 (GHSA: OAuth client could send credentials
+  to an authorization server chosen by the MCP server). gmail-mcp uses only the stdio server, so it
+  was not exposed through that path, but the dependency is now patched.
+- `proxy-addr` 2.0.7 → 2.0.8 (critical, via the SDK's express): IP spoofing via IPv4-mapped IPv6
+  trust subnets.
+- `source-map-js` 1.2.1 → 1.2.2 (dev-only): event-loop denial of service.
+
 ## [1.0.0] - 2026-09-27
 
 The capability + organize-and-draft release. gmail-cli graduates to 1.0.0: per-profile
@@ -121,4 +133,5 @@ still App-Password-only (no OAuth), JSON-by-default, and fail-closed.
   publish workflow runs a stricter gate on production dependencies
   (`npm audit --omit=dev --audit-level=moderate`) immediately before `npm publish`, so a vulnerable dependency can no longer ship silently through either path.
 
+[1.0.1]: https://github.com/AJMarquez99/gmail-cli/releases/tag/v1.0.1
 [1.0.0]: https://github.com/AJMarquez99/gmail-cli/releases/tag/v1.0.0
