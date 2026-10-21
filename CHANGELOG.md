@@ -15,6 +15,9 @@ Security patch release. No behavior changes.
 - `proxy-addr` 2.0.7 → 2.0.8 (critical, via the SDK's express): IP spoofing via IPv4-mapped IPv6
   trust subnets.
 - `source-map-js` 1.2.1 → 1.2.2 (dev-only): event-loop denial of service.
+- `hono` → 4.13.13 (moderate, via the SDK): `serveStatic` double-decodes the request path. gmail-mcp
+  does not serve static files.
+- `vite` → 8.3.4 (dev-only, via vitest): `launch-editor` command-execution fixes.
 
 ## [1.0.0] - 2026-09-27
 
