@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-10-28
+
+Security patch release. No behavior changes.
+
+### Security
+- `body-parser` 2.3.0 → 2.4.0 (high, GHSA-27r3-jxmh-p828, via the SDK's express): denial of service
+  via trailing bytes after a compressed request body. gmail-mcp runs over stdio only, so express's
+  HTTP body parsing is never reached.
+- `zod` 4.4.3 → 4.6.7 (high, GHSA-mrhx-c7xc-m3w5; direct dependency, floor raised to `^4.6.7`):
+  memory exhaustion while validating oversized constrained collections. Affects gmail-mcp tool-input
+  validation; a local stdio client could only exhaust its own server process.
+- `nodemailer` 10.0.11 → 10.2.1 (moderate; direct dependency, floor raised to `^10.2.1`):
+  addressparser fixes (GHSA-8c8m-p3m8-cjg8, GHSA-m943-m63m-w62w, GHSA-85x2-q946-cp5h,
+  GHSA-g73g-hqqh-jr95) and SMTP AUTH regex backtracking DoS (GHSA-4ffr-jq9g-5ffx). The recipient
+  allowlist matches whole addresses exactly before anything reaches nodemailer, so mis-parsing could
+  not route mail to an unlisted recipient; patched regardless.
+- `mailparser` 3.9.29 → 3.12.4 (moderate; direct dependency, floor raised to `^3.12.4`): pulls in the
+  patched nodemailer address parser used when reading headers.
+- `@hono/node-server` 2.1.1 → 2.1.5 (moderate, GHSA-rmxm-3fg6-px4f, via the SDK): `serveStatic`
+  double-decodes the request path. gmail-mcp does not serve static files.
+- `fast-uri` 3.1.8 → 3.1.9 (moderate, via the SDK's ajv): scheme spoofing, host confusion and path
+  normalization fixes (GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h,
+  GHSA-333x-w4r6-6crp).
+- `ip-address` 10.7.2 → 10.7.5 (moderate, GHSA-rxp7-6hxx-x8q5, via imapflow's socks and the SDK):
+  quadratic-time IPv6 zone-identifier matching.
+- `qs` 6.16.0 → 6.17.0 (moderate, GHSA-6pq8-jhm2-2vcw, via the SDK's express): `stringify` with
+  `arrayFormat: 'comma'` can throw (DoS). Not reached over stdio.
+- `vitest` / `@vitest/mocker` 4.1.11 → 4.1.12 (moderate, dev-only; GHSA-qxg6-89mg-rqv8,
+  GHSA-xp26-3454-mjgp): mock-registration code injection and a Windows redirect-allowlist bypass.
+
 ## [1.0.1] - 2026-10-21
 
 Security patch release. No behavior changes.
@@ -136,5 +166,6 @@ still App-Password-only (no OAuth), JSON-by-default, and fail-closed.
   publish workflow runs a stricter gate on production dependencies
   (`npm audit --omit=dev --audit-level=moderate`) immediately before `npm publish`, so a vulnerable dependency can no longer ship silently through either path.
 
+[1.0.2]: https://github.com/AJMarquez99/gmail-cli/releases/tag/v1.0.2
 [1.0.1]: https://github.com/AJMarquez99/gmail-cli/releases/tag/v1.0.1
 [1.0.0]: https://github.com/AJMarquez99/gmail-cli/releases/tag/v1.0.0
